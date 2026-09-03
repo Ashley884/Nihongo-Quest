@@ -117,7 +117,185 @@ function selectAdminTopic(id){ if(!id){openTopicForm();return;} const t=state.ad
 function drawQuestions(topicId){ const qs=state.adminQuestions.filter(q=>q.topic_id===topicId).map(normalizeQuestion).sort((a,b)=>a.sort_order-b.sort_order); document.querySelector('#questionList').innerHTML=qs.map((q,i)=>`<article class="q-card"><div class="q-num">Q${String(i+1).padStart(2,'0')}</div><div class="q-content"><h4>${esc(q.question_text)}</h4><div class="option-mini">${q.options.map((o,j)=>`<span class="${j===q.correct_index?'correct':''}">${String.fromCharCode(65+j)}. ${esc(o)}</span>`).join('')}</div></div><div class="q-actions"><button class="secondary editQ" data-id="${q.id}">Edit</button><button class="danger deleteQ" data-id="${q.id}">Delete</button></div></article>`).join('') || '<div class="empty">No questions yet. Add the first one.</div>'; document.querySelectorAll('.editQ').forEach(b=>b.addEventListener('click',()=>openQuestionForm(state.adminQuestions.find(q=>q.id===b.dataset.id)))); document.querySelectorAll('.deleteQ').forEach(b=>b.addEventListener('click',()=>deleteQuestion(b.dataset.id))); }
 function modal(inner){ const wrap=document.createElement('div'); wrap.className='modal-backdrop'; wrap.innerHTML=`<div class="modal">${inner}</div>`; document.body.appendChild(wrap); wrap.addEventListener('click',e=>{if(e.target===wrap)wrap.remove();}); return wrap; }
 function openTopicForm(t=null){ const isEdit=!!t; const m=modal(`<div class="modal-head"><h2>${isEdit?'Edit Topic':'New Topic'}</h2><button class="close">×</button></div><form id="topicForm"><label>Topic name<input id="tName" required value="${esc(t?.name||'')}" placeholder="e.g. Numbers" /></label><label>URL slug<input id="tSlug" required value="${esc(t?.slug||'')}" placeholder="numbers" /></label><label>Subtitle<input id="tSub" value="${esc(t?.subtitle||'')}" placeholder="Romaji label or short description" /></label><label>Icon<input id="tIcon" value="${esc(t?.icon||'🌸')}" maxlength="4" /></label><label>Order<input id="tOrder" type="number" min="1" value="${t?.sort_order||state.adminTopics.length+1}" /></label><label class="check"><input id="tPublished" type="checkbox" ${t?.published!==false?'checked':''}/> Visible to students</label><button class="primary full">${isEdit?'Save Changes':'Create Topic'}</button></form>`); m.querySelector('.close').onclick=()=>m.remove(); m.querySelector('#tName').addEventListener('input',e=>{if(!isEdit)m.querySelector('#tSlug').value=slugify(e.target.value);}); m.querySelector('#topicForm').onsubmit=async e=>{e.preventDefault(); const payload={name:m.querySelector('#tName').value.trim(),slug:slugify(m.querySelector('#tSlug').value),subtitle:m.querySelector('#tSub').value.trim(),icon:m.querySelector('#tIcon').value.trim()||'🌸',sort_order:Number(m.querySelector('#tOrder').value),published:m.querySelector('#tPublished').checked}; const res=isEdit?await supabase.from('topics').update(payload).eq('id',t.id).select().single():await supabase.from('topics').insert(payload).select().single(); if(res.error){toast(res.error.code==='23505'?'That URL slug is already in use. Choose a different slug.':res.error.message,true);return;} if(!res.data){toast('Topic was not confirmed by the database. Please try again.',true);return;} m.remove(); await renderAdmin(); toast(isEdit?'Topic updated successfully':'Topic created successfully');}; }
-function openQuestionForm(q=null){ const isEdit=!!q; const topic=isEdit?state.adminTopics.find(t=>t.id===q.topic_id):state.adminTopics.find(t=>t.id===document.querySelector('.admin-topic.active')?.dataset.id); const opts=q?.options||['','','','']; const m=modal(`<div class="modal-head"><h2>${isEdit?'Edit Question':'Add Question'}</h2><button class="close">×</button></div><form id="qForm"><label>Topic<select id="qTopic">${state.adminTopics.map(t=>`<option value="${t.id}" ${topic?.id===t.id?'selected':''}>${esc(t.name)}</option>`).join('')}</select></label><label>Question text<textarea id="qText" required placeholder="Type the question in romaji / English as appropriate.">${esc(q?.question_text||'')}</textarea></label><div class="option-fields">${opts.map((o,i)=>`<label>Option ${String.fromCharCode(65+i)}<input class="qOpt" value="${esc(o)}" required /></label>`).join('')}</div><label>Correct answer<select id="qCorrect">${[0,1,2,3].map(i=>`<option value="${i}" ${Number(q?.correct_index||0)===i?'selected':''}>Option ${String.fromCharCode(65+i)}</option>`).join('')}</select></label><label>Order<input id="qOrder" type="number" min="1" value="${q?.sort_order||((state.adminQuestions.filter(x=>x.topic_id===topic?.id).length||0)+1)}" /></label><button class="primary full">${isEdit?'Save Question':'Add Question'}</button></form>`); m.querySelector('.close').onclick=()=>m.remove(); m.querySelector('#qForm').onsubmit=async e=>{e.preventDefault(); const topicId=m.querySelector('#qTopic').value; const options=[...m.querySelectorAll('.qOpt')].map(x=>x.value.trim()); if(options.some(x=>!x)){toast('Please fill in all four answer options.',true);return;} const questionText=m.querySelector('#qText').value.trim(); if(!questionText){toast('Please enter the question text.',true);return;} const correctIndex=Number(m.querySelector('#qCorrect').value); const payload={topic_id:topicId,question_text:questionText,options,correct_index:correctIndex,sort_order:Number(m.querySelector('#qOrder').value),option_a:options[0],option_b:options[1],option_c:options[2],option_d:options[3],correct_option:correctIndex}; const res=isEdit?await supabase.from('questions').update(payload).eq('id',q.id).select().single():await supabase.from('questions').insert(payload).select().single(); if(res.error){toast(`Could not save question: ${res.error.message}`,true);console.error('Question save error:',res.error);return;} if(!res.data){toast('Question save returned no database row. Please try again.',true);return;} m.remove(); toast(isEdit?'Question updated successfully':'Question added successfully'); await renderAdmin();}; }
+function openQuestionForm(q=null){
+  const isEdit=!!q;
+  const topic=isEdit
+    ? state.adminTopics.find(t=>t.id===q.topic_id)
+    : state.adminTopics.find(t=>t.id===document.querySelector('.admin-topic.active')?.dataset.id);
+
+  const opts=q?.options || [
+    q?.option_a || '',
+    q?.option_b || '',
+    q?.option_c || '',
+    q?.option_d || ''
+  ];
+
+  const m=modal(`
+    <div class="modal-head">
+      <h2>${isEdit?'Edit Question':'Add Question'}</h2>
+      <button class="close" type="button">×</button>
+    </div>
+
+    <form id="qForm">
+
+      <label>
+        Topic
+        <select id="qTopic">
+          ${state.adminTopics.map(t=>`
+            <option value="${t.id}" ${topic?.id===t.id?'selected':''}>
+              ${esc(t.name)}
+            </option>
+          `).join('')}
+        </select>
+      </label>
+
+      <label>
+        Question text
+        <textarea
+          id="qText"
+          required
+          placeholder="Type the question in romaji / English as appropriate."
+        >${esc(q?.question_text||'')}</textarea>
+      </label>
+
+      <div class="option-fields">
+        ${opts.map((o,i)=>`
+          <label>
+            Option ${String.fromCharCode(65+i)}
+            <input
+              class="qOpt"
+              value="${esc(o)}"
+              required
+            />
+          </label>
+        `).join('')}
+      </div>
+
+      <label>
+        Correct answer
+        <select id="qCorrect">
+          ${[0,1,2,3].map(i=>`
+            <option
+              value="${i}"
+              ${Number(q?.correct_index ?? q?.correct_option ?? 0)===i?'selected':''}
+            >
+              Option ${String.fromCharCode(65+i)}
+            </option>
+          `).join('')}
+        </select>
+      </label>
+
+      <label>
+        Order
+        <input
+          id="qOrder"
+          type="number"
+          min="1"
+          value="${q?.sort_order || ((state.adminQuestions.filter(x=>x.topic_id===topic?.id).length||0)+1)}"
+        />
+      </label>
+
+      <button class="primary full" type="submit">
+        ${isEdit?'Save Question':'Add Question'}
+      </button>
+
+    </form>
+  `);
+
+  m.querySelector('.close').onclick=()=>m.remove();
+
+  m.querySelector('#qForm').onsubmit=async e=>{
+    e.preventDefault();
+
+    const topicId=m.querySelector('#qTopic').value;
+
+    const options=[
+      ...m.querySelectorAll('.qOpt')
+    ].map(x=>x.value.trim());
+
+    if(!topicId){
+      toast('Please select a topic.',true);
+      return;
+    }
+
+    if(options.length!==4 || options.some(x=>!x)){
+      toast('Please fill in all four answer options.',true);
+      return;
+    }
+
+    const questionText=m.querySelector('#qText').value.trim();
+
+    if(!questionText){
+      toast('Please enter the question text.',true);
+      return;
+    }
+
+    const correctIndex=Number(m.querySelector('#qCorrect').value);
+    const sortOrder=Number(m.querySelector('#qOrder').value)||1;
+
+    const payload={
+      topic_id:topicId,
+      question_text:questionText,
+      options:options,
+      correct_index:correctIndex,
+      sort_order:sortOrder,
+
+      /* Keep compatibility with the older database columns */
+      option_a:options[0],
+      option_b:options[1],
+      option_c:options[2],
+      option_d:options[3],
+      correct_option:correctIndex
+    };
+
+    console.log('Saving question payload:',payload);
+
+    let saveResult;
+
+    if(isEdit){
+      saveResult=await supabase
+        .from('questions')
+        .update(payload)
+        .eq('id',q.id);
+    }else{
+      saveResult=await supabase
+        .from('questions')
+        .insert(payload);
+    }
+
+    console.log('Supabase question save result:',saveResult);
+
+    if(saveResult.error){
+      toast(
+        `Could not save question: ${saveResult.error.message}`,
+        true
+      );
+
+      console.error(
+        'Question save error:',
+        saveResult.error
+      );
+
+      return;
+    }
+
+    /*
+      Do not use .single() here.
+      The question has already been accepted by Supabase.
+      Reload the admin data directly from the database.
+    */
+
+    m.remove();
+
+    toast(
+      isEdit
+        ? 'Question updated successfully'
+        : 'Question added successfully'
+    );
+
+    await renderAdmin();
+  };
+}
 async function deleteTopic(id){ if(!confirm('Delete this topic and all its questions?'))return; const {error}=await supabase.from('topics').delete().eq('id',id); if(error){toast(error.message,true);return;} await renderAdmin(); toast('Topic deleted'); }
 async function deleteQuestion(id){ if(!confirm('Delete this question?'))return; const {error}=await supabase.from('questions').delete().eq('id',id); if(error){toast(error.message,true);return;} await renderAdmin(); toast('Question deleted'); }
 
