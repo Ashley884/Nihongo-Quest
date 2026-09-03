@@ -304,3 +304,4 @@ async function router(){
   await loadTopics(); if(path().startsWith('/quiz/')){await quiz(decodeURIComponent(path().split('/')[2]||''));return;} home();
 }
 router();
+
