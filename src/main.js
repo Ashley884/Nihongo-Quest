@@ -45,12 +45,25 @@ const path = () => window.location.pathname;
 
 function layout(content, admin = false) {
   const menuItems = admin
-    ? `<a href="/">Quiz Home</a><button id="menuLogout" type="button">Log out</button>`
-    : `<a href="/">Quiz Home</a><a href="/admin">Admin</a>`;
+    ? `
+        <a href="/">Quiz Home</a>
+        <button id="menuLogout" type="button">
+          Log out
+        </button>
+      `
+    : `
+        <a href="/">Quiz Home</a>
+        <a href="/admin">Admin</a>
+      `;
 
   app.innerHTML = `
     <header class="site-header">
-      <a class="brand" href="/" aria-label="Nihongo Quest home">
+
+      <a
+        class="brand"
+        href="/"
+        aria-label="Nihongo Quest home"
+      >
         <span class="brand-mark">N</span>
         <span>NIHONGO QUEST</span>
       </a>
@@ -63,31 +76,42 @@ function layout(content, admin = false) {
           type="button"
           aria-label="Open menu"
           aria-expanded="false"
-        >☰</button>
-
-        ${
-          admin
-            ? '<button class="admin-pill" id="logoutBtn" type="button">Log out</button>'
-            : '<a class="admin-pill" href="/admin">Admin</a>'
-        }
+        >
+          ☰
+        </button>
 
       </div>
+
     </header>
 
-    <nav class="site-menu" id="siteMenu" aria-label="Site menu">
+    <nav
+      class="site-menu"
+      id="siteMenu"
+      aria-label="Site menu"
+    >
       ${menuItems}
     </nav>
 
     ${content}
 
-    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div
+      id="toast"
+      class="toast"
+      role="status"
+      aria-live="polite"
+    ></div>
   `;
 
-  const menuBtn = document.querySelector('#menuBtn');
-  const menu = document.querySelector('#siteMenu');
+  const menuBtn =
+    document.querySelector('#menuBtn');
+
+  const menu =
+    document.querySelector('#siteMenu');
 
   const closeMenu = () => {
-    document.body.classList.remove('menu-open');
+    document.body.classList.remove(
+      'menu-open'
+    );
 
     menuBtn?.setAttribute(
       'aria-expanded',
@@ -104,40 +128,46 @@ function layout(content, admin = false) {
     }
   };
 
-  menuBtn?.addEventListener('click', e => {
-    e.stopPropagation();
+  menuBtn?.addEventListener(
+    'click',
+    e => {
+      e.stopPropagation();
 
-    const open =
-      !document.body.classList.contains(
-        'menu-open'
+      const open =
+        !document.body.classList.contains(
+          'menu-open'
+        );
+
+      document.body.classList.toggle(
+        'menu-open',
+        open
       );
 
-    document.body.classList.toggle(
-      'menu-open',
-      open
-    );
+      menuBtn.setAttribute(
+        'aria-expanded',
+        String(open)
+      );
 
-    menuBtn.setAttribute(
-      'aria-expanded',
-      String(open)
-    );
+      menuBtn.setAttribute(
+        'aria-label',
+        open
+          ? 'Close menu'
+          : 'Open menu'
+      );
 
-    menuBtn.setAttribute(
-      'aria-label',
-      open
-        ? 'Close menu'
-        : 'Open menu'
-    );
-
-    menuBtn.textContent =
-      open ? '×' : '☰';
-  });
-
-  menu?.addEventListener('click', e => {
-    if (e.target.closest('a')) {
-      closeMenu();
+      menuBtn.textContent =
+        open ? '×' : '☰';
     }
-  });
+  );
+
+  menu?.addEventListener(
+    'click',
+    e => {
+      if (e.target.closest('a')) {
+        closeMenu();
+      }
+    }
+  );
 
   document.onkeydown = e => {
     if (e.key === 'Escape') {
@@ -158,40 +188,13 @@ function layout(content, admin = false) {
   };
 
   /*
-    DESKTOP LOG OUT BUTTON
+    LOG OUT
 
-    The correct Supabase method is:
-    supabase.auth.signOut()
-  */
+    There is intentionally NO logout button
+    outside the menu.
 
-  document
-    .querySelector('#logoutBtn')
-    ?.addEventListener(
-      'click',
-      async () => {
-        const { error } =
-          await supabase.auth.signOut();
-
-        if (error) {
-          toast(
-            error.message,
-            true
-          );
-
-          return;
-        }
-
-        state.adminUser = null;
-
-        await renderAdminLogin();
-      }
-    );
-
-  /*
-    MOBILE MENU LOG OUT BUTTON
-
-    This is the only logout option inside
-    the hamburger menu.
+    The only logout button is inside the
+    hamburger menu on the admin page.
   */
 
   document
@@ -201,7 +204,9 @@ function layout(content, admin = false) {
       async () => {
         closeMenu();
 
-        const { error } =
+        const {
+          error
+        } =
           await supabase.auth.signOut();
 
         if (error) {
@@ -248,11 +253,12 @@ async function loadTopics() {
   const {
     data,
     error
-  } = await supabase
-    .from('topics')
-    .select('*')
-    .eq('published', true)
-    .order('sort_order');
+  } =
+    await supabase
+      .from('topics')
+      .select('*')
+      .eq('published', true)
+      .order('sort_order');
 
   if (error) {
     state.topics = [];
@@ -299,11 +305,12 @@ async function loadQuestions(topic) {
   const {
     data,
     error
-  } = await supabase
-    .from('questions')
-    .select('*')
-    .eq('topic_id', topic.id)
-    .order('sort_order');
+  } =
+    await supabase
+      .from('questions')
+      .select('*')
+      .eq('topic_id', topic.id)
+      .order('sort_order');
 
   if (error) {
     state.questionError = error;
@@ -352,6 +359,7 @@ function home() {
       <section class="topic-head">
 
         <div>
+
           <div class="eyebrow dark">
             QUIZ LIBRARY
           </div>
@@ -359,6 +367,7 @@ function home() {
           <h2>
             Choose your quiz
           </h2>
+
         </div>
 
         <input
@@ -501,7 +510,10 @@ async function quiz(slug) {
     layout(`
       <main class="quiz-shell">
 
-        <a class="back" href="/">
+        <a
+          class="back"
+          href="/"
+        >
           ← All topics
         </a>
 
@@ -543,7 +555,10 @@ async function quiz(slug) {
     layout(`
       <main class="quiz-shell">
 
-        <a class="back" href="/">
+        <a
+          class="back"
+          href="/"
+        >
           ← All topics
         </a>
 
@@ -606,7 +621,10 @@ function renderQuestion() {
   layout(`
     <main class="quiz-shell">
 
-      <a class="back" href="/">
+      <a
+        class="back"
+        href="/"
+      >
         ← All topics
       </a>
 
@@ -629,7 +647,9 @@ function renderQuestion() {
         </div>
 
         <div class="progress-line">
-          <i style="width:${pct}%"></i>
+          <i
+            style="width:${pct}%"
+          ></i>
         </div>
 
         <h1>
@@ -649,6 +669,7 @@ function renderQuestion() {
                   }"
                   data-i="${i}"
                 >
+
                   <b>
                     ${String.fromCharCode(
                       65 + i
@@ -891,7 +912,9 @@ async function renderAdminLogin() {
 
           </label>
 
-          <button class="primary full">
+          <button
+            class="primary full"
+          >
             Sign in
           </button>
 
