@@ -1,4 +1,6 @@
-import { supabase } from './supabase.js';
+import './style.css';
+import { supabase, supabaseConfigured } from './supabase.js';
+import { fallbackTopics, greetingsQuestions } from './data.js';
 
 const APP_VERSION = '1.3';
 
@@ -6,176 +8,68 @@ const state = {
   topics: [],
   questions: [],
   currentTopic: null,
-  currentQuestionIndex: 0,
-  selectedAnswer: null,
-  adminUser: null
+  currentIndex: 0,
+  selected: null,
+  score: 0,
+  adminUser: null,
+  adminTopics: [],
+  adminQuestions: [],
+  editingTopic: null,
+  editingQuestion: null,
+  topicError: null,
+  questionError: null
 };
-
-
-/* =========================================================
-   BASIC HELPERS
-   ========================================================= */
 
 const app = document.querySelector('#app');
 
-function esc(value){
-  return String(value ?? '')
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#039;');
-}
-
-function toast(message,error=false){
-  let el=document.querySelector('.toast');
-
-  if(!el){
-    el=document.createElement('div');
-    el.className='toast';
-    document.body.appendChild(el);
-  }
-
-  el.textContent=message;
-  el.className=`toast ${error?'error':''} show`;
-
-  clearTimeout(window.__toastTimer);
-
-  window.__toastTimer=setTimeout(()=>{
-    el.classList.remove('show');
-  },3000);
-}
-
-
-/* =========================================================
-   DARK MODE
-   ========================================================= */
-
-function getSavedTheme(){
-  try{
-    return localStorage.getItem('nihongo_theme');
-  }catch{
-    return null;
-  }
-}
-
-function getSystemTheme(){
-  return window.matchMedia &&
-    window.matchMedia('(prefers-color-scheme: dark)').matches
-      ? 'dark'
-      : 'light';
-}
-
-function getCurrentTheme(){
-  return document.documentElement.dataset.theme || getSystemTheme();
-}
-
-function applyTheme(theme){
-  const finalTheme =
-    theme === 'dark' || theme === 'light'
-      ? theme
-      : getSystemTheme();
-
-  document.documentElement.dataset.theme=finalTheme;
-
-  try{
-    if(theme === 'dark' || theme === 'light'){
-      localStorage.setItem('nihongo_theme',theme);
-    }else{
-      localStorage.removeItem('nihongo_theme');
-    }
-  }catch{}
-
-  updateThemeToggle();
-}
-
-function initializeTheme(){
-  const saved=getSavedTheme();
-
-  if(saved === 'dark' || saved === 'light'){
-    document.documentElement.dataset.theme=saved;
-  }else{
-    document.documentElement.dataset.theme=getSystemTheme();
-  }
-
-  if(window.matchMedia){
-    const media=window.matchMedia('(prefers-color-scheme: dark)');
-
-    const systemChanged=()=>{
-      const savedTheme=getSavedTheme();
-
-      if(savedTheme !== 'dark' && savedTheme !== 'light'){
-        document.documentElement.dataset.theme=
-          media.matches ? 'dark' : 'light';
-
-        updateThemeToggle();
-      }
-    };
-
-    if(media.addEventListener){
-      media.addEventListener('change',systemChanged);
-    }else if(media.addListener){
-      media.addListener(systemChanged);
-    }
-  }
-}
-
-function updateThemeToggle(){
-  const button=document.querySelector('#themeToggle');
-
-  if(!button){
-    return;
-  }
-
-  const current=getCurrentTheme();
-  const isDark=current === 'dark';
-
-  const stateEl=button.querySelector('.theme-toggle-state');
-
-  if(stateEl){
-    stateEl.textContent=isDark ? 'Dark' : 'Light';
-  }
-
-  button.setAttribute(
-    'aria-label',
-    isDark ? 'Switch to light mode' : 'Switch to dark mode'
+const esc = (v = '') =>
+  String(v).replace(
+    /[&<>"']/g,
+    c => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&#039;',
+      "'": '&#039;'
+    }[c])
   );
-}
 
-function toggleTheme(){
-  const current=getCurrentTheme();
+const slugify = (v = '') =>
+  v
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
 
-  applyTheme(
-    current === 'dark'
-      ? 'light'
-      : 'dark'
-  );
-}
+const path = () => window.location.pathname;
 
-
-/* =========================================================
-   HEADER / MENU
-   ========================================================= */
-
-function layout(content,admin=false){
-  const menuItems=admin
+function layout(content, admin = false) {
+  const menuItems = admin
     ? `
-      <a href="/">Quiz Home</a>
-      <button id="menuLogout" type="button">Log out</button>
-    `
+        <a href="/">Quiz Home</a>
+        <button id="menuLogout" type="button">
+          Log out
+        </button>
+      `
     : `
-      <a href="/">Quiz Home</a>
-      <a href="/admin">Admin</a>
-    `;
+        <a href="/">Quiz Home</a>
+        <a href="/admin">Admin</a>
+      `;
 
-  app.innerHTML=`
+  app.innerHTML = `
     <header class="site-header">
-      <a class="brand" href="/">
-        <span class="brand-mark">桜</span>
+
+      <a
+        class="brand"
+        href="/"
+        aria-label="Nihongo Quest home"
+      >
+        <span class="brand-mark">N</span>
         <span>NIHONGO QUEST</span>
       </a>
 
       <div class="header-actions">
+
         <button
           class="ghost"
           id="menuBtn"
@@ -185,136 +79,261 @@ function layout(content,admin=false){
         >
           ☰
         </button>
+
       </div>
 
-      <nav class="site-menu" id="siteMenu">
-        ${menuItems}
-
-        <button
-          id="themeToggle"
-          class="theme-toggle"
-          type="button"
-          aria-label="Switch theme"
-        >
-          <span class="theme-toggle-label">
-            <span>◐</span>
-            <span>Dark mode</span>
-          </span>
-
-          <span class="theme-toggle-state">Dark</span>
-        </button>
-      </nav>
     </header>
 
-    <main>
-      ${content}
-    </main>
+    <nav
+      class="site-menu"
+      id="siteMenu"
+      aria-label="Site menu"
+    >
+      ${menuItems}
+    </nav>
 
-    <div class="toast"></div>
+    ${content}
+
+    <div
+      id="toast"
+      class="toast"
+      role="status"
+      aria-live="polite"
+    ></div>
   `;
 
-  const menuBtn=document.querySelector('#menuBtn');
-  const menu=document.querySelector('#siteMenu');
+  const menuBtn =
+    document.querySelector('#menuBtn');
 
-  menuBtn.addEventListener('click',()=>{
-    const open=document.body.classList.toggle('menu-open');
+  const menu =
+    document.querySelector('#siteMenu');
 
-    menuBtn.setAttribute(
-      'aria-expanded',
-      open ? 'true' : 'false'
+  const closeMenu = () => {
+    document.body.classList.remove(
+      'menu-open'
     );
 
-    menuBtn.textContent=open ? '×' : '☰';
-  });
+    menuBtn?.setAttribute(
+      'aria-expanded',
+      'false'
+    );
 
-  document.addEventListener('click',function closeMenu(event){
-    if(
-      document.body.classList.contains('menu-open') &&
-      !event.target.closest('.site-menu') &&
-      !event.target.closest('#menuBtn')
-    ){
-      document.body.classList.remove('menu-open');
-      menuBtn.setAttribute('aria-expanded','false');
-      menuBtn.textContent='☰';
+    menuBtn?.setAttribute(
+      'aria-label',
+      'Open menu'
+    );
+
+    if (menuBtn) {
+      menuBtn.textContent = '☰';
     }
-  },{once:true});
+  };
 
-  document.querySelector('#themeToggle')
-    .addEventListener('click',()=>{
-      toggleTheme();
-    });
+  menuBtn?.addEventListener(
+    'click',
+    e => {
+      e.stopPropagation();
 
-  const logout=document.querySelector('#menuLogout');
+      const open =
+        !document.body.classList.contains(
+          'menu-open'
+        );
 
-  if(logout){
-    logout.addEventListener('click',async()=>{
-      const {error}=await supabase.auth.signOut();
+      document.body.classList.toggle(
+        'menu-open',
+        open
+      );
 
-      if(error){
-        toast(error.message,true);
-        return;
+      menuBtn.setAttribute(
+        'aria-expanded',
+        String(open)
+      );
+
+      menuBtn.setAttribute(
+        'aria-label',
+        open
+          ? 'Close menu'
+          : 'Open menu'
+      );
+
+      menuBtn.textContent =
+        open ? '×' : '☰';
+    }
+  );
+
+  menu?.addEventListener(
+    'click',
+    e => {
+      if (e.target.closest('a')) {
+        closeMenu();
       }
+    }
+  );
 
-      state.adminUser=null;
+  document.onkeydown = e => {
+    if (e.key === 'Escape') {
+      closeMenu();
+    }
+  };
 
-      await renderAdminLogin();
-    });
-  }
+  document.onclick = e => {
+    if (
+      document.body.classList.contains(
+        'menu-open'
+      ) &&
+      !menu?.contains(e.target) &&
+      !menuBtn?.contains(e.target)
+    ) {
+      closeMenu();
+    }
+  };
 
-  updateThemeToggle();
+  /*
+    LOG OUT
+
+    There is intentionally NO logout button
+    outside the menu.
+
+    The only logout button is inside the
+    hamburger menu on the admin page.
+  */
+
+  document
+    .querySelector('#menuLogout')
+    ?.addEventListener(
+      'click',
+      async () => {
+        closeMenu();
+
+        const {
+          error
+        } =
+          await supabase.auth.signOut();
+
+        if (error) {
+          toast(
+            error.message,
+            true
+          );
+
+          return;
+        }
+
+        state.adminUser = null;
+
+        await renderAdminLogin();
+      }
+    );
 }
 
+function toast(msg, error = false) {
+  const el =
+    document.querySelector('#toast');
 
-/* =========================================================
-   DATA
-   ========================================================= */
+  if (!el) return;
 
-async function loadTopics(){
-  const {data,error}=await supabase
-    .from('topics')
-    .select('*')
-    .order('sort_order',{ascending:true});
+  el.textContent = msg;
 
-  if(error){
-    toast(error.message,true);
+  el.className =
+    'toast show' +
+    (error ? ' error' : '');
+
+  setTimeout(() => {
+    el.className = 'toast';
+  }, 2800);
+}
+
+async function loadTopics() {
+  state.topicError = null;
+
+  if (!supabaseConfigured) {
+    state.topics = fallbackTopics;
+    return;
+  }
+
+  const {
+    data,
+    error
+  } =
+    await supabase
+      .from('topics')
+      .select('*')
+      .eq('published', true)
+      .order('sort_order');
+
+  if (error) {
+    state.topics = [];
+    state.topicError = error;
+    return;
+  }
+
+  state.topics = data || [];
+}
+
+function normalizeQuestion(q) {
+  const options =
+    Array.isArray(q.options) &&
+    q.options.length === 4
+      ? q.options
+      : [
+          q.option_a,
+          q.option_b,
+          q.option_c,
+          q.option_d
+        ];
+
+  const correctIndex =
+    Number.isInteger(q.correct_index)
+      ? q.correct_index
+      : Number(q.correct_option);
+
+  return {
+    ...q,
+    options,
+    correct_index: correctIndex
+  };
+}
+
+async function loadQuestions(topic) {
+  state.questionError = null;
+
+  if (!supabaseConfigured) {
+    return topic.slug === 'greetings'
+      ? greetingsQuestions
+      : [];
+  }
+
+  const {
+    data,
+    error
+  } =
+    await supabase
+      .from('questions')
+      .select('*')
+      .eq('topic_id', topic.id)
+      .order('sort_order');
+
+  if (error) {
+    state.questionError = error;
     return [];
   }
 
-  return data || [];
+  return (data || []).map(
+    normalizeQuestion
+  );
 }
 
-async function loadQuestions(topicId){
-  const {data,error}=await supabase
-    .from('questions')
-    .select('*')
-    .eq('topic_id',topicId)
-    .order('sort_order',{ascending:true});
-
-  if(error){
-    toast(error.message,true);
-    return [];
-  }
-
-  return data || [];
-}
-
-
-/* =========================================================
-   HOME PAGE
-   ========================================================= */
-
-async function renderHome(){
-  const topics=await loadTopics();
-
-  state.topics=topics.filter(t=>t.published !== false);
+function home() {
+  const topics = state.topics;
 
   layout(`
-    <section class="shell">
+    <main class="shell">
 
-      <div class="hero">
+      <section class="hero">
+
         <div class="hero-copy">
+
           <div class="eyebrow">
-            JAPANESE QUIZ TRAINING
+            ROMAJI • FOCUSED • QUIZ ONLY
           </div>
 
           <h1>
@@ -323,145 +342,255 @@ async function renderHome(){
           </h1>
 
           <p>
-            Choose a topic and test your Japanese knowledge
-            with short, focused quizzes.
+            Choose a topic, answer the questions, and see your result.
+            No distractions — just focused romaji practice.
           </p>
+
         </div>
 
-        <div class="hero-art" aria-hidden="true">
+        <div class="hero-art">
           <span>🌸</span>
           <span>✦</span>
+          <span>🌸</span>
         </div>
-      </div>
 
-      <div class="topic-head">
+      </section>
+
+      <section class="topic-head">
+
         <div>
-          <div class="eyebrow dark">QUIZ LIBRARY</div>
-          <h2>Choose a topic</h2>
+
+          <div class="eyebrow dark">
+            QUIZ LIBRARY
+          </div>
+
+          <h2>
+            Choose your quiz
+          </h2>
+
         </div>
 
         <input
-          class="search"
           id="topicSearch"
-          type="search"
-          placeholder="Search topics..."
-          autocomplete="off"
-        >
-      </div>
+          class="search"
+          placeholder="Search topics…"
+          aria-label="Search topics"
+        />
 
-      <div class="topic-grid" id="topicGrid">
-        ${topicCards(state.topics)}
-      </div>
+      </section>
 
-    </section>
+      <section
+        id="topicGrid"
+        class="topic-grid"
+      ></section>
+
+    </main>
   `);
 
-  document.querySelector('#topicSearch')
-    .addEventListener('input',(event)=>{
-      const term=event.target.value.toLowerCase().trim();
-
-      const filtered=state.topics.filter(topic=>
-        `${topic.name} ${topic.subtitle || ''}`
-          .toLowerCase()
-          .includes(term)
+  const render = (term = '') => {
+    const grid =
+      document.querySelector(
+        '#topicGrid'
       );
 
-      document.querySelector('#topicGrid').innerHTML=
-        topicCards(filtered);
-    });
+    if (state.topicError) {
+      grid.innerHTML = `
+        <div class="empty">
+          We could not load the quiz library right now.
+          Please refresh and try again.
+        </div>
+      `;
+
+      return;
+    }
+
+    const filtered =
+      topics.filter(t =>
+        (
+          t.name +
+          ' ' +
+          (t.subtitle || '')
+        )
+          .toLowerCase()
+          .includes(
+            term.toLowerCase()
+          )
+      );
+
+    grid.innerHTML =
+      filtered
+        .map(
+          (t, i) => `
+            <article class="topic-card">
+
+              <div class="topic-top">
+
+                <span class="topic-number">
+                  ${String(
+                    t.sort_order ||
+                      i + 1
+                  ).padStart(
+                    2,
+                    '0'
+                  )}
+                </span>
+
+                <span class="topic-icon">
+                  ${esc(
+                    t.icon || '🌸'
+                  )}
+                </span>
+
+              </div>
+
+              <h3>
+                ${esc(t.name)}
+              </h3>
+
+              <p>
+                ${esc(
+                  t.subtitle || ''
+                )}
+              </p>
+
+              <a
+                class="take"
+                href="/quiz/${encodeURIComponent(
+                  t.slug
+                )}"
+              >
+                Take Quiz
+                <span>↗</span>
+              </a>
+
+            </article>
+          `
+        )
+        .join('') ||
+      '<div class="empty">No matching topics.</div>';
+  };
+
+  render();
+
+  document
+    .querySelector('#topicSearch')
+    .addEventListener(
+      'input',
+      e => {
+        render(
+          e.target.value
+        );
+      }
+    );
 }
 
-function topicCards(topics){
-  if(!topics.length){
-    return `
-      <div class="empty">
-        No topics found.
-      </div>
-    `;
+async function quiz(slug) {
+  const topic =
+    state.topics.find(
+      t => t.slug === slug
+    );
+
+  if (!topic) {
+    notFound();
+    return;
   }
 
-  return topics.map((topic,index)=>`
-    <article class="topic-card">
-      <div class="topic-top">
-        <span class="topic-number">
-          ${String(index+1).padStart(2,'0')}
-        </span>
+  const questions =
+    await loadQuestions(
+      topic
+    );
 
-        <span class="topic-icon">
-          ${esc(topic.icon || '🌸')}
-        </span>
-      </div>
+  state.currentTopic = topic;
+  state.questions = questions;
+  state.currentIndex = 0;
+  state.selected = null;
+  state.score = 0;
 
-      <h3>${esc(topic.name)}</h3>
-
-      <p>
-        ${esc(topic.subtitle || 'Japanese quiz practice')}
-      </p>
-
-      <a
-        class="take"
-        href="/quiz/${encodeURIComponent(topic.slug)}"
-      >
-        <span>Start quiz</span>
-        <span>→</span>
-      </a>
-    </article>
-  `).join('');
-}
-
-
-/* =========================================================
-   QUIZ PAGE
-   ========================================================= */
-
-async function renderQuiz(slug){
-  const topics=await loadTopics();
-
-  const topic=topics.find(
-    t=>t.slug === slug && t.published !== false
-  );
-
-  if(!topic){
+  if (state.questionError) {
     layout(`
-      <section class="quiz-shell">
-        <div class="quiz-panel result">
-          <div class="result-flower">🌸</div>
-          <h1>404</h1>
-          <p>Quiz topic not found.</p>
-          <div class="result-actions">
-            <a class="take" href="/">Back to quizzes</a>
+      <main class="quiz-shell">
+
+        <a
+          class="back"
+          href="/"
+        >
+          ← All topics
+        </a>
+
+        <section class="quiz-panel">
+
+          <div class="empty-icon">
+            ⚠
           </div>
-        </div>
-      </section>
+
+          <div class="eyebrow dark">
+            ${esc(topic.name)}
+          </div>
+
+          <h1>
+            Quiz could not load
+          </h1>
+
+          <p>
+            There was a problem loading this quiz.
+            Please refresh and try again.
+          </p>
+
+          <a
+            class="take dark-btn"
+            href="/"
+          >
+            Choose another topic
+          </a>
+
+        </section>
+
+      </main>
     `);
 
     return;
   }
 
-  const questions=await loadQuestions(topic.id);
-
-  state.currentTopic=topic;
-  state.questions=questions;
-  state.currentQuestionIndex=0;
-  state.selectedAnswer=null;
-
-  if(!questions.length){
+  if (!questions.length) {
     layout(`
-      <section class="quiz-shell">
-        <a class="back" href="/">← Back to quizzes</a>
+      <main class="quiz-shell">
 
-        <div class="quiz-panel result">
-          <div class="result-flower">
-            ${esc(topic.icon || '🌸')}
+        <a
+          class="back"
+          href="/"
+        >
+          ← All topics
+        </a>
+
+        <section class="quiz-panel">
+
+          <div class="empty-icon">
+            🌸
           </div>
 
-          <h2>${esc(topic.name)}</h2>
+          <div class="eyebrow dark">
+            ${esc(topic.name)}
+          </div>
+
+          <h1>
+            Quiz coming soon
+          </h1>
 
           <p>
-            This quiz does not have any questions yet.
+            This topic is ready, but its questions have not
+            been added yet.
           </p>
-        </div>
-      </section>
+
+          <a
+            class="take dark-btn"
+            href="/"
+          >
+            Choose another topic
+          </a>
+
+        </section>
+
+      </main>
     `);
 
     return;
@@ -470,461 +599,635 @@ async function renderQuiz(slug){
   renderQuestion();
 }
 
-function renderQuestion(){
-  const topic=state.currentTopic;
-  const questions=state.questions;
-  const index=state.currentQuestionIndex;
-  const question=questions[index];
+function renderQuestion() {
+  const q =
+    normalizeQuestion(
+      state.questions[
+        state.currentIndex
+      ]
+    );
 
-  state.selectedAnswer=null;
+  const total =
+    state.questions.length;
 
-  const options=Array.isArray(question.options)
-    ? question.options
-    : [
-        question.option_a,
-        question.option_b,
-        question.option_c,
-        question.option_d
-      ].filter(v=>v !== null && v !== undefined && v !== '');
+  const pct =
+    Math.round(
+      (
+        (state.currentIndex + 1) /
+        total
+      ) * 100
+    );
 
   layout(`
-    <section class="quiz-shell">
+    <main class="quiz-shell">
 
-      <a class="back" href="/">
-        ← Back to quizzes
+      <a
+        class="back"
+        href="/"
+      >
+        ← All topics
       </a>
 
-      <div class="quiz-panel">
+      <section class="quiz-panel">
 
         <div class="quiz-meta">
-          <span>${esc(topic.name)}</span>
-          <span>${index+1} / ${questions.length}</span>
+
+          <span>
+            ${esc(
+              state.currentTopic.name
+            ).toUpperCase()}
+          </span>
+
+          <span>
+            ${state.currentIndex + 1}
+            /
+            ${total}
+          </span>
+
         </div>
 
         <div class="progress-line">
-          <i style="width:${((index+1)/questions.length)*100}%"></i>
+          <i
+            style="width:${pct}%"
+          ></i>
         </div>
 
         <h1>
-          ${esc(question.question_text || question.question || '')}
+          ${esc(q.question_text)}
         </h1>
 
         <div class="answers">
-          ${options.map((option,i)=>`
-            <button
-              class="answer"
-              type="button"
-              data-answer="${i}"
-            >
-              <b>${String.fromCharCode(65+i)}</b>
-              <span>${esc(option)}</span>
-            </button>
-          `).join('')}
+
+          ${q.options
+            .map(
+              (o, i) => `
+                <button
+                  class="answer ${
+                    state.selected === i
+                      ? 'selected'
+                      : ''
+                  }"
+                  data-i="${i}"
+                >
+
+                  <b>
+                    ${String.fromCharCode(
+                      65 + i
+                    )}
+                  </b>
+
+                  <span>
+                    ${esc(o)}
+                  </span>
+
+                </button>
+              `
+            )
+            .join('')}
+
         </div>
 
         <div class="quiz-footer">
+
           <span class="hint">
             Choose one answer
           </span>
 
           <button
+            id="nextBtn"
             class="primary"
-            id="nextQuestion"
-            type="button"
-            disabled
           >
-            ${index === questions.length-1
-              ? 'Finish quiz'
-              : 'Next question'}
+            ${
+              state.currentIndex ===
+              total - 1
+                ? 'Finish Quiz'
+                : 'Next →'
+            }
           </button>
+
         </div>
 
-      </div>
-    </section>
+      </section>
+
+    </main>
   `);
 
-  document.querySelectorAll('.answer')
-    .forEach(button=>{
-      button.addEventListener('click',()=>{
-        document.querySelectorAll('.answer')
-          .forEach(item=>item.classList.remove('selected'));
+  document
+    .querySelectorAll('.answer')
+    .forEach(b => {
+      b.addEventListener(
+        'click',
+        () => {
+          state.selected =
+            Number(
+              b.dataset.i
+            );
 
-        button.classList.add('selected');
-
-        state.selectedAnswer=
-          Number(button.dataset.answer);
-
-        document.querySelector('#nextQuestion')
-          .disabled=false;
-      });
+          renderQuestion();
+        }
+      );
     });
 
-  document.querySelector('#nextQuestion')
-    .addEventListener('click',()=>{
-      if(state.selectedAnswer === null){
-        return;
-      }
-
-      if(
-        state.currentQuestionIndex ===
-        state.questions.length-1
-      ){
-        renderResult();
-      }else{
-        state.currentQuestionIndex++;
-        renderQuestion();
-      }
-    });
+  document
+    .querySelector('#nextBtn')
+    .addEventListener(
+      'click',
+      nextQuestion
+    );
 }
 
-function renderResult(){
+function nextQuestion() {
+  if (
+    state.selected === null
+  ) {
+    toast(
+      'Please choose an answer first.',
+      true
+    );
+
+    return;
+  }
+
+  if (
+    state.selected ===
+    normalizeQuestion(
+      state.questions[
+        state.currentIndex
+      ]
+    ).correct_index
+  ) {
+    state.score++;
+  }
+
+  state.currentIndex++;
+  state.selected = null;
+
+  if (
+    state.currentIndex <
+    state.questions.length
+  ) {
+    renderQuestion();
+  } else {
+    renderResult();
+  }
+}
+
+function renderResult() {
+  const total =
+    state.questions.length;
+
+  const pct =
+    Math.round(
+      (state.score / total) *
+        100
+    );
+
   layout(`
-    <section class="quiz-shell">
+    <main class="quiz-shell">
 
-      <div class="quiz-panel result">
+      <section class="quiz-panel result">
 
-        <div class="result-flower">🌸</div>
+        <div class="result-flower">
+          🌸
+        </div>
 
-        <h1>Done!</h1>
+        <div class="eyebrow dark">
+          QUIZ COMPLETE
+        </div>
+
+        <h1>
+          ${pct}%
+        </h1>
 
         <p>
-          You completed the quiz.
+          You got
+          <strong>${state.score}</strong>
+          out of
+          <strong>${total}</strong>
+          correct.
         </p>
 
         <div class="result-actions">
-          <button
-            class="take"
-            id="retryQuiz"
-            type="button"
-          >
-            Try again
-          </button>
 
           <a
-            class="secondary"
+            class="primary take"
+            href="/quiz/${esc(
+              state.currentTopic.slug
+            )}"
+          >
+            Try Again
+          </a>
+
+          <a
+            class="secondary take"
             href="/"
           >
-            Back to quizzes
+            Choose Another Topic
           </a>
+
         </div>
 
-      </div>
+      </section>
 
-    </section>
+    </main>
   `);
-
-  document.querySelector('#retryQuiz')
-    .addEventListener('click',()=>{
-      state.currentQuestionIndex=0;
-      renderQuestion();
-    });
 }
 
-
-/* =========================================================
-   ADMIN AUTH
-   ========================================================= */
-
-async function checkAdmin(){
-  const {
-    data:{
-      session
-    }
-  }=await supabase.auth.getSession();
-
-  if(!session){
-    state.adminUser=null;
-    return false;
-  }
-
-  const {
-    data,
-    error
-  }=await supabase
-    .from('admin_users')
-    .select('user_id')
-    .eq('user_id',session.user.id)
-    .maybeSingle();
-
-  if(error || !data){
-    state.adminUser=null;
-    return false;
-  }
-
-  state.adminUser=session.user;
-
-  return true;
-}
-
-async function renderAdminLogin(){
+function notFound() {
   layout(`
-    <section class="admin-shell">
+    <main class="quiz-shell">
 
-      <div class="login-card">
+      <section class="quiz-panel result">
+
+        <div class="eyebrow dark">
+          404
+        </div>
+
+        <h1>
+          Page not found
+        </h1>
+
+        <p>
+          That quiz link does not exist.
+        </p>
+
+        <a
+          class="primary take"
+          href="/"
+        >
+          Back to quizzes
+        </a>
+
+      </section>
+
+    </main>
+  `);
+}
+
+async function renderAdminLogin() {
+  layout(`
+    <main class="admin-shell">
+
+      <section class="login-card">
 
         <div class="brand-mark big">
-          桜
+          N
         </div>
 
         <div class="eyebrow dark">
           PRIVATE ADMIN
         </div>
 
-        <h1>Admin login</h1>
+        <h1>
+          Quiz Manager
+        </h1>
 
         <p>
-          Sign in to manage quiz topics and questions.
+          Sign in to manage topics and questions.
         </p>
 
-        <form id="adminLoginForm">
+        <form id="loginForm">
 
           <label>
             Email
 
             <input
-              id="adminEmail"
+              id="email"
               type="email"
               required
-              autocomplete="email"
-            >
+              placeholder="your admin email"
+            />
+
           </label>
 
           <label>
             Password
 
             <input
-              id="adminPassword"
+              id="password"
               type="password"
               required
-              autocomplete="current-password"
-            >
+              placeholder="Your password"
+            />
+
           </label>
 
           <button
             class="primary full"
-            type="submit"
           >
             Sign in
           </button>
 
         </form>
 
-      </div>
+        <a
+          class="back"
+          href="/"
+        >
+          ← Back to quizzes
+        </a>
 
-    </section>
+      </section>
+
+    </main>
   `);
 
-  document.querySelector('#adminLoginForm')
-    .addEventListener('submit',async(event)=>{
-      event.preventDefault();
+  document
+    .querySelector('#loginForm')
+    .addEventListener(
+      'submit',
+      async e => {
+        e.preventDefault();
 
-      const email=
-        document.querySelector('#adminEmail').value.trim();
+        if (!supabaseConfigured) {
+          toast(
+            'Connect Supabase first.',
+            true
+          );
 
-      const password=
-        document.querySelector('#adminPassword').value;
+          return;
+        }
 
-      const {
-        data,
-        error
-      }=await supabase.auth.signInWithPassword({
-        email,
-        password
-      });
+        const {
+          data,
+          error
+        } =
+          await supabase.auth.signInWithPassword(
+            {
+              email:
+                document.querySelector(
+                  '#email'
+                ).value,
 
-      if(error){
-        toast(error.message,true);
-        return;
+              password:
+                document.querySelector(
+                  '#password'
+                ).value
+            }
+          );
+
+        if (error) {
+          toast(
+            error.message,
+            true
+          );
+
+          return;
+        }
+
+        state.adminUser =
+          data.user;
+
+        await renderAdmin();
       }
-
-      const {
-        data:adminRecord
-      }=await supabase
-        .from('admin_users')
-        .select('user_id')
-        .eq('user_id',data.user.id)
-        .maybeSingle();
-
-      if(!adminRecord){
-        await supabase.auth.signOut();
-        toast('This account is not an admin.',true);
-        return;
-      }
-
-      state.adminUser=data.user;
-
-      await renderAdmin();
-    });
+    );
 }
 
+async function renderAdmin() {
+  const {
+    data: sessionData
+  } =
+    await supabase.auth.getSession();
 
-/* =========================================================
-   ADMIN HOME
-   ========================================================= */
-
-async function renderAdmin(){
-  const isAdmin=await checkAdmin();
-
-  if(!isAdmin){
-    await renderAdminLogin();
+  if (!sessionData.session) {
+    renderAdminLogin();
     return;
   }
 
-  state.topics=await loadTopics();
+  state.adminUser =
+    sessionData.session.user;
 
-  layout(`
-    <section class="admin-shell wide">
+  const {
+    data: topics,
+    error: tErr
+  } =
+    await supabase
+      .from('topics')
+      .select('*')
+      .order('sort_order');
 
-      <div class="admin-title">
+  if (tErr) {
+    toast(
+      tErr.message,
+      true
+    );
 
-        <div>
-          <div class="eyebrow dark">
-            CONTENT MANAGEMENT
+    return;
+  }
+
+  state.adminTopics =
+    topics || [];
+
+  const {
+    data: qs,
+    error: qErr
+  } =
+    await supabase
+      .from('questions')
+      .select('*')
+      .order('sort_order');
+
+  if (qErr) {
+    toast(
+      qErr.message,
+      true
+    );
+
+    return;
+  }
+
+  state.adminQuestions =
+    (qs || []).map(
+      normalizeQuestion
+    );
+
+  layout(
+    `
+      <main class="admin-shell wide">
+
+        <div class="admin-title">
+
+          <div>
+
+            <div class="eyebrow dark">
+              PRIVATE ADMIN
+            </div>
+
+            <h1>
+              Quiz Manager
+
+              <small class="version-tag">
+                v${APP_VERSION}
+              </small>
+            </h1>
+
+            <p>
+              Manage the 40 topic links and every quiz question.
+            </p>
+
           </div>
 
-          <h1>Admin</h1>
+          <button
+            id="newTopic"
+            class="primary"
+          >
+            + New Topic
+          </button>
 
-          <p>
-            Manage your quiz topics and questions.
-          </p>
         </div>
 
-        <button
-          class="primary"
-          id="newTopic"
-          type="button"
-        >
-          + New topic
-        </button>
+        <div class="admin-layout">
 
-      </div>
+          <aside class="admin-topics">
 
-      <div class="admin-layout">
+            <h3>
+              Topics
+            </h3>
 
-        <aside class="admin-topics">
+            <div
+              id="adminTopicList"
+            ></div>
 
-          <h3>Topics</h3>
+          </aside>
 
-          <div id="adminTopicList">
-            ${adminTopicList(state.topics)}
-          </div>
+          <section
+            class="manager"
+            id="manager"
+          ></section>
 
-        </aside>
+        </div>
 
-        <section
-          class="manager"
-          id="topicManager"
-        >
-          <div class="empty">
-            Select a topic to manage it.
-          </div>
-        </section>
+      </main>
+    `,
+    true
+  );
 
-      </div>
+  drawAdminTopics();
 
-    </section>
-  `,true);
+  selectAdminTopic(
+    state.adminTopics[0]?.id
+  );
 
-  document.querySelector('#newTopic')
-    .addEventListener('click',()=>{
-      openTopicForm();
-    });
+  document
+    .querySelector('#newTopic')
+    .addEventListener(
+      'click',
+      () => openTopicForm()
+    );
+}
 
-  document.querySelectorAll('.admin-topic')
-    .forEach(button=>{
-      button.addEventListener('click',()=>{
-        const topicId=button.dataset.id;
+function drawAdminTopics() {
+  document.querySelector(
+    '#adminTopicList'
+  ).innerHTML =
+    state.adminTopics
+      .map(
+        t => `
+          <button
+            class="admin-topic"
+            data-id="${t.id}"
+          >
 
-        const topic=state.topics.find(
-          item=>String(item.id) === String(topicId)
-        );
+            <span>
+              ${esc(
+                t.icon || '🌸'
+              )}
+            </span>
 
-        if(topic){
-          selectAdminTopic(topic);
-        }
-      });
+            <span>
+              ${esc(t.name)}
+            </span>
+
+            <small>
+              ${
+                state.adminQuestions.filter(
+                  q =>
+                    q.topic_id ===
+                    t.id
+                ).length
+              }
+            </small>
+
+          </button>
+        `
+      )
+      .join('');
+
+  document
+    .querySelectorAll(
+      '.admin-topic'
+    )
+    .forEach(b => {
+      b.addEventListener(
+        'click',
+        () =>
+          selectAdminTopic(
+            b.dataset.id
+          )
+      );
     });
 }
 
-function adminTopicList(topics){
-  if(!topics.length){
-    return `
-      <div class="empty">
-        No topics yet.
-      </div>
-    `;
-  }
-
-  return topics.map((topic,index)=>`
-    <button
-      class="admin-topic"
-      type="button"
-      data-id="${esc(topic.id)}"
-    >
-      <span>${esc(topic.icon || '🌸')}</span>
-
-      <span>${esc(topic.name)}</span>
-
-      <small>
-        ${index+1}
-      </small>
-    </button>
-  `).join('');
-}
-
-
-/* =========================================================
-   ADMIN TOPIC MANAGER
-   ========================================================= */
-
-async function selectAdminTopic(topic){
-  state.currentTopic=topic;
-
-  state.questions=await loadQuestions(topic.id);
-
-  const manager=document.querySelector('#topicManager');
-
-  if(!manager){
+function selectAdminTopic(id) {
+  if (!id) {
+    openTopicForm();
     return;
   }
 
-  document.querySelectorAll('.admin-topic')
-    .forEach(button=>{
-      button.classList.toggle(
+  const t =
+    state.adminTopics.find(
+      x => x.id === id
+    );
+
+  if (!t) return;
+
+  document
+    .querySelectorAll(
+      '.admin-topic'
+    )
+    .forEach(b => {
+      b.classList.toggle(
         'active',
-        String(button.dataset.id) === String(topic.id)
+        b.dataset.id ===
+          String(id)
       );
     });
 
-  manager.innerHTML=`
+  document.querySelector(
+    '#manager'
+  ).innerHTML = `
     <div class="manager-head">
 
       <div>
+
         <div class="topic-icon large">
-          ${esc(topic.icon || '🌸')}
+          ${esc(
+            t.icon || '🌸'
+          )}
         </div>
 
-        <h2>${esc(topic.name)}</h2>
+        <h2>
+          ${esc(t.name)}
+        </h2>
 
         <p>
-          ${esc(topic.subtitle || '')}
+          /${esc(t.slug)}
         </p>
+
       </div>
 
       <div class="manager-actions">
 
         <button
-          class="secondary"
           id="editTopic"
-          type="button"
+          class="secondary"
         >
-          Edit topic
+          Edit Topic
         </button>
 
         <button
-          class="danger"
           id="deleteTopic"
-          type="button"
+          class="danger"
         >
           Delete
         </button>
@@ -936,702 +1239,916 @@ async function selectAdminTopic(topic){
     <div class="question-head">
 
       <h3>
-        Questions (${state.questions.length})
+        Questions (
+        ${
+          state.adminQuestions.filter(
+            q =>
+              q.topic_id ===
+              t.id
+          ).length
+        }
+        )
       </h3>
 
       <button
-        class="primary"
         id="newQuestion"
-        type="button"
+        class="primary"
       >
-        + Add question
+        + Add Question
       </button>
 
     </div>
 
-    <div id="questionList">
-      ${questionList(state.questions)}
-    </div>
+    <div
+      id="questionList"
+    ></div>
   `;
 
-  document.querySelector('#editTopic')
-    .addEventListener('click',()=>{
-      openTopicForm(topic);
-    });
+  drawQuestions(t.id);
 
-  document.querySelector('#deleteTopic')
-    .addEventListener('click',()=>{
-      deleteTopic(topic);
-    });
+  document
+    .querySelector('#editTopic')
+    .addEventListener(
+      'click',
+      () => openTopicForm(t)
+    );
+
+  document
+    .querySelector('#deleteTopic')
+    .addEventListener(
+      'click',
+      () =>
+        deleteTopic(t.id)
+    );
 
   /*
-   * IMPORTANT:
-   * Do NOT pass the topic into openQuestionForm().
-   * Passing topic here was the previous bug that caused
-   * Add Question to behave like Edit Question.
-   */
-  document.querySelector('#newQuestion')
-    .addEventListener('click',()=>{
-      openQuestionForm();
-    });
-
-  document.querySelectorAll('[data-edit-question]')
-    .forEach(button=>{
-      button.addEventListener('click',()=>{
-        const questionId=button.dataset.editQuestion;
-
-        const question=state.questions.find(
-          item=>String(item.id) === String(questionId)
-        );
-
-        if(question){
-          openQuestionForm(question);
-        }
-      });
-    });
-
-  document.querySelectorAll('[data-delete-question]')
-    .forEach(button=>{
-      button.addEventListener('click',()=>{
-        const questionId=button.dataset.deleteQuestion;
-
-        const question=state.questions.find(
-          item=>String(item.id) === String(questionId)
-        );
-
-        if(question){
-          deleteQuestion(question);
-        }
-      });
-    });
-}
-
-function questionList(questions){
-  if(!questions.length){
-    return `
-      <div class="empty">
-        No questions yet. Add your first question.
-      </div>
-    `;
-  }
-
-  return questions.map((question,index)=>{
-    const options=Array.isArray(question.options)
-      ? question.options
-      : [
-          question.option_a,
-          question.option_b,
-          question.option_c,
-          question.option_d
-        ].filter(v=>v !== null && v !== undefined && v !== '');
-
-    let correctIndex=Number(question.correct_index);
-
-    if(Number.isNaN(correctIndex)){
-      const letters=['A','B','C','D'];
-
-      correctIndex=
-        letters.indexOf(question.correct_option);
-    }
-
-    return `
-      <article class="q-card">
-
-        <div class="q-num">
-          Q${index+1}
-        </div>
-
-        <div class="q-content">
-
-          <h4>
-            ${esc(
-              question.question_text ||
-              question.question ||
-              ''
-            )}
-          </h4>
-
-          <div class="option-mini">
-
-            ${options.map((option,i)=>`
-              <span class="${i===correctIndex?'correct':''}">
-                ${String.fromCharCode(65+i)}.
-                ${esc(option)}
-              </span>
-            `).join('')}
-
-          </div>
-
-        </div>
-
-        <div class="q-actions">
-
-          <button
-            class="secondary"
-            type="button"
-            data-edit-question="${esc(question.id)}"
-          >
-            Edit
-          </button>
-
-          <button
-            class="danger"
-            type="button"
-            data-delete-question="${esc(question.id)}"
-          >
-            Delete
-          </button>
-
-        </div>
-
-      </article>
-    `;
-  }).join('');
-}
-
-
-/* =========================================================
-   TOPIC FORM
-   ========================================================= */
-
-function openTopicForm(topic=null){
-  const isEdit=!!topic;
-
-  const modal=document.createElement('div');
-
-  modal.className='modal-backdrop';
-
-  modal.innerHTML=`
-    <div class="modal">
-
-      <div class="modal-head">
-
-        <h2>
-          ${isEdit ? 'Edit topic' : 'New topic'}
-        </h2>
-
-        <button
-          class="close"
-          type="button"
-          id="closeModal"
-        >
-          ×
-        </button>
-
-      </div>
-
-      <form id="topicForm">
-
-        <label>
-          Topic name
-
-          <input
-            id="topicName"
-            value="${esc(topic?.name || '')}"
-            required
-          >
-        </label>
-
-        <label>
-          URL slug
-
-          <input
-            id="topicSlug"
-            value="${esc(topic?.slug || '')}"
-            placeholder="greetings"
-            required
-          >
-        </label>
-
-        <label>
-          Subtitle
-
-          <input
-            id="topicSubtitle"
-            value="${esc(topic?.subtitle || '')}"
-          >
-        </label>
-
-        <label>
-          Icon
-
-          <input
-            id="topicIcon"
-            value="${esc(topic?.icon || '🌸')}"
-          >
-        </label>
-
-        <label>
-          Sort order
-
-          <input
-            id="topicSort"
-            type="number"
-            value="${esc(topic?.sort_order ?? state.topics.length+1)}"
-          >
-        </label>
-
-        <label class="check">
-          <input
-            id="topicPublished"
-            type="checkbox"
-            ${topic?.published !== false ? 'checked' : ''}
-          >
-
-          <span>
-            Published
-          </span>
-        </label>
-
-        <button
-          class="primary"
-          type="submit"
-        >
-          ${isEdit ? 'Save topic' : 'Create topic'}
-        </button>
-
-      </form>
-
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-
-  document.querySelector('#closeModal')
-    .addEventListener('click',()=>{
-      modal.remove();
-    });
-
-  document.querySelector('#topicForm')
-    .addEventListener('submit',async(event)=>{
-      event.preventDefault();
-
-      const payload={
-        name:document.querySelector('#topicName').value.trim(),
-        slug:document.querySelector('#topicSlug').value.trim(),
-        subtitle:document.querySelector('#topicSubtitle').value.trim(),
-        icon:document.querySelector('#topicIcon').value.trim(),
-        sort_order:Number(
-          document.querySelector('#topicSort').value
-        ) || 0,
-        published:
-          document.querySelector('#topicPublished').checked
-      };
-
-      const result=isEdit
-        ? await supabase
-            .from('topics')
-            .update(payload)
-            .eq('id',topic.id)
-        : await supabase
-            .from('topics')
-            .insert(payload);
-
-      if(result.error){
-        toast(
-          `Could not save topic: ${result.error.message}`,
-          true
-        );
-        return;
-      }
-
-      modal.remove();
-
-      toast(
-        isEdit
-          ? 'Topic updated successfully.'
-          : 'Topic created successfully.'
-      );
-
-      await renderAdmin();
-    });
-}
-
-
-/* =========================================================
-   QUESTION FORM
-   ========================================================= */
-
-function openQuestionForm(q=null){
-  const isEdit=!!q;
-
-  const options=Array.isArray(q?.options)
-    ? q.options
-    : [
-        q?.option_a,
-        q?.option_b,
-        q?.option_c,
-        q?.option_d
-      ].filter(v=>v !== null && v !== undefined && v !== '');
-
-  while(options.length<4){
-    options.push('');
-  }
-
-  let correctIndex=Number(q?.correct_index);
-
-  if(Number.isNaN(correctIndex)){
-    const letters=['A','B','C','D'];
-
-    correctIndex=
-      letters.indexOf(q?.correct_option);
-
-    if(correctIndex<0){
-      correctIndex=0;
-    }
-  }
-
-  const modal=document.createElement('div');
-
-  modal.className='modal-backdrop';
-
-  modal.innerHTML=`
-    <div class="modal">
-
-      <div class="modal-head">
-
-        <h2>
-          ${isEdit ? 'Edit question' : 'Add question'}
-        </h2>
-
-        <button
-          class="close"
-          type="button"
-          id="closeModal"
-        >
-          ×
-        </button>
-
-      </div>
-
-      <form id="questionForm">
-
-        <label>
-          Question
-
-          <textarea
-            id="questionText"
-            required
-            placeholder="Type the question here..."
-          >${esc(
-            q?.question_text ||
-            q?.question ||
-            ''
-          )}</textarea>
-        </label>
-
-        <div class="option-fields">
-
-          <label>
-            Option A
-
-            <input
-              id="option0"
-              value="${esc(options[0])}"
-              required
-            >
-          </label>
-
-          <label>
-            Option B
-
-            <input
-              id="option1"
-              value="${esc(options[1])}"
-              required
-            >
-          </label>
-
-          <label>
-            Option C
-
-            <input
-              id="option2"
-              value="${esc(options[2])}"
-              required
-            >
-          </label>
-
-          <label>
-            Option D
-
-            <input
-              id="option3"
-              value="${esc(options[3])}"
-              required
-            >
-          </label>
-
-        </div>
-
-        <label>
-          Correct answer
-
-          <select id="correctIndex">
-
-            <option value="0" ${correctIndex===0?'selected':''}>
-              A
-            </option>
-
-            <option value="1" ${correctIndex===1?'selected':''}>
-              B
-            </option>
-
-            <option value="2" ${correctIndex===2?'selected':''}>
-              C
-            </option>
-
-            <option value="3" ${correctIndex===3?'selected':''}>
-              D
-            </option>
-
-          </select>
-        </label>
-
-        <label>
-          Sort order
-
-          <input
-            id="questionSort"
-            type="number"
-            value="${esc(q?.sort_order ?? state.questions.length+1)}"
-          >
-        </label>
-
-        <button
-          class="primary"
-          type="submit"
-        >
-          ${isEdit ? 'Save question' : 'Add question'}
-        </button>
-
-      </form>
-
-    </div>
-  `;
-
-  document.body.appendChild(modal);
-
-  document.querySelector('#closeModal')
-    .addEventListener('click',()=>{
-      modal.remove();
-    });
-
-  document.querySelector('#questionForm')
-    .addEventListener('submit',async(event)=>{
-      event.preventDefault();
-
-      const questionText=
-        document.querySelector('#questionText')
-          .value
-          .trim();
-
-      const questionOptions=[
-        document.querySelector('#option0').value.trim(),
-        document.querySelector('#option1').value.trim(),
-        document.querySelector('#option2').value.trim(),
-        document.querySelector('#option3').value.trim()
-      ];
-
-      const correctIndexValue=
-        Number(
-          document.querySelector('#correctIndex').value
-        );
-
-      const sortOrder=
-        Number(
-          document.querySelector('#questionSort').value
-        ) || 0;
-
-      const payload={
-        topic_id:state.currentTopic.id,
-        question_text:questionText,
-        options:questionOptions,
-        correct_index:correctIndexValue,
-        sort_order:sortOrder
-      };
-
-      /*
-       * IMPORTANT:
-       * This is the working insert/update logic.
-       * Do not add .select().single() here.
-       */
-      const res=isEdit
-        ? await supabase
-            .from('questions')
-            .update(payload)
-            .eq('id',q.id)
-        : await supabase
-            .from('questions')
-            .insert(payload);
-
-      if(res.error){
-        toast(
-          `Could not save question: ${res.error.message}`,
-          true
-        );
-        return;
-      }
-
-      modal.remove();
-
-      toast(
-        isEdit
-          ? 'Question updated successfully.'
-          : 'Question added successfully.'
-      );
-
-      await selectAdminTopic(state.currentTopic);
-    });
-}
-
-
-/* =========================================================
-   DELETE TOPIC
-   ========================================================= */
-
-async function deleteTopic(topic){
-  const confirmed=window.confirm(
-    `Delete "${topic.name}" and all of its questions?`
-  );
-
-  if(!confirmed){
-    return;
-  }
-
-  const {error}=await supabase
-    .from('topics')
-    .delete()
-    .eq('id',topic.id);
-
-  if(error){
-    toast(
-      `Could not delete topic: ${error.message}`,
-      true
+    IMPORTANT:
+    Add Question must NOT receive the topic object.
+
+    Passing the topic object makes openQuestionForm()
+    think it is editing an existing question.
+
+    We intentionally call it with no argument.
+  */
+
+  document
+    .querySelector('#newQuestion')
+    .addEventListener(
+      'click',
+      () => openQuestionForm()
     );
-    return;
-  }
-
-  toast('Topic deleted.');
-
-  await renderAdmin();
 }
 
-
-/* =========================================================
-   DELETE QUESTION
-   ========================================================= */
-
-async function deleteQuestion(question){
-  const confirmed=window.confirm(
-    'Delete this question?'
-  );
-
-  if(!confirmed){
-    return;
-  }
-
-  const {error}=await supabase
-    .from('questions')
-    .delete()
-    .eq('id',question.id);
-
-  if(error){
-    toast(
-      `Could not delete question: ${error.message}`,
-      true
-    );
-    return;
-  }
-
-  toast('Question deleted.');
-
-  await selectAdminTopic(state.currentTopic);
-}
-
-
-/* =========================================================
-   ROUTING
-   ========================================================= */
-
-function getRoute(){
-  const path=
-    window.location.pathname
-      .replace(/\/+/g,'/')
-      .replace(/\/$/,'');
-
-  if(path === '' || path === '/'){
-    return {
-      type:'home'
-    };
-  }
-
-  if(path === '/admin'){
-    return {
-      type:'admin'
-    };
-  }
-
-  if(path.startsWith('/quiz/')){
-    return {
-      type:'quiz',
-      slug:decodeURIComponent(
-        path.slice('/quiz/'.length)
+function drawQuestions(topicId) {
+  const qs =
+    state.adminQuestions
+      .filter(
+        q =>
+          q.topic_id ===
+          topicId
       )
-    };
-  }
+      .map(normalizeQuestion)
+      .sort(
+        (a, b) =>
+          a.sort_order -
+          b.sort_order
+      );
 
-  return {
-    type:'home'
+  document.querySelector(
+    '#questionList'
+  ).innerHTML =
+    qs
+      .map(
+        (q, i) => `
+          <article class="q-card">
+
+            <div class="q-num">
+              Q${String(
+                i + 1
+              ).padStart(
+                2,
+                '0'
+              )}
+            </div>
+
+            <div class="q-content">
+
+              <h4>
+                ${esc(
+                  q.question_text
+                )}
+              </h4>
+
+              <div class="option-mini">
+
+                ${q.options
+                  .map(
+                    (o, j) => `
+                      <span
+                        class="${
+                          j ===
+                          q.correct_index
+                            ? 'correct'
+                            : ''
+                        }"
+                      >
+                        ${String.fromCharCode(
+                          65 + j
+                        )}.
+                        ${esc(o)}
+                      </span>
+                    `
+                  )
+                  .join('')}
+
+              </div>
+
+            </div>
+
+            <div class="q-actions">
+
+              <button
+                class="secondary editQ"
+                data-id="${q.id}"
+              >
+                Edit
+              </button>
+
+              <button
+                class="danger deleteQ"
+                data-id="${q.id}"
+              >
+                Delete
+              </button>
+
+            </div>
+
+          </article>
+        `
+      )
+      .join('') ||
+    '<div class="empty">No questions yet. Add the first one.</div>';
+
+  document
+    .querySelectorAll('.editQ')
+    .forEach(b => {
+      b.addEventListener(
+        'click',
+        () =>
+          openQuestionForm(
+            state.adminQuestions.find(
+              q =>
+                q.id ===
+                b.dataset.id
+            )
+          )
+      );
+    });
+
+  document
+    .querySelectorAll(
+      '.deleteQ'
+    )
+    .forEach(b => {
+      b.addEventListener(
+        'click',
+        () =>
+          deleteQuestion(
+            b.dataset.id
+          )
+      );
+    });
+}
+
+function modal(inner) {
+  const wrap =
+    document.createElement(
+      'div'
+    );
+
+  wrap.className =
+    'modal-backdrop';
+
+  wrap.innerHTML = `
+    <div class="modal">
+      ${inner}
+    </div>
+  `;
+
+  document.body.appendChild(
+    wrap
+  );
+
+  wrap.addEventListener(
+    'click',
+    e => {
+      if (e.target === wrap) {
+        wrap.remove();
+      }
+    }
+  );
+
+  return wrap;
+}
+
+function openTopicForm(t = null) {
+  const isEdit = !!t;
+
+  const m = modal(`
+    <div class="modal-head">
+
+      <h2>
+        ${
+          isEdit
+            ? 'Edit Topic'
+            : 'New Topic'
+        }
+      </h2>
+
+      <button class="close">
+        ×
+      </button>
+
+    </div>
+
+    <form id="topicForm">
+
+      <label>
+        Topic name
+
+        <input
+          id="tName"
+          required
+          value="${esc(
+            t?.name || ''
+          )}"
+          placeholder="e.g. Numbers"
+        />
+
+      </label>
+
+      <label>
+        URL slug
+
+        <input
+          id="tSlug"
+          required
+          value="${esc(
+            t?.slug || ''
+          )}"
+          placeholder="numbers"
+        />
+
+      </label>
+
+      <label>
+        Subtitle
+
+        <input
+          id="tSub"
+          value="${esc(
+            t?.subtitle || ''
+          )}"
+          placeholder="Romaji label or short description"
+        />
+
+      </label>
+
+      <label>
+        Icon
+
+        <input
+          id="tIcon"
+          value="${esc(
+            t?.icon || '🌸'
+          )}"
+          maxlength="4"
+        />
+
+      </label>
+
+      <label>
+        Order
+
+        <input
+          id="tOrder"
+          type="number"
+          min="1"
+          value="${
+            t?.sort_order ||
+            state.adminTopics
+              .length + 1
+          }"
+        />
+
+      </label>
+
+      <label class="check">
+
+        <input
+          id="tPublished"
+          type="checkbox"
+          ${
+            t?.published !==
+            false
+              ? 'checked'
+              : ''
+          }
+        />
+
+        Visible to students
+
+      </label>
+
+      <button
+        class="primary full"
+      >
+        ${
+          isEdit
+            ? 'Save Changes'
+            : 'Create Topic'
+        }
+      </button>
+
+    </form>
+  `);
+
+  m.querySelector(
+    '.close'
+  ).onclick =
+    () => m.remove();
+
+  m.querySelector(
+    '#tName'
+  ).addEventListener(
+    'input',
+    e => {
+      if (!isEdit) {
+        m.querySelector(
+          '#tSlug'
+        ).value =
+          slugify(
+            e.target.value
+          );
+      }
+    }
+  );
+
+  m.querySelector(
+    '#topicForm'
+  ).onsubmit = async e => {
+    e.preventDefault();
+
+    const payload = {
+      name: m
+        .querySelector(
+          '#tName'
+        )
+        .value.trim(),
+
+      slug: slugify(
+        m
+          .querySelector(
+            '#tSlug'
+          )
+          .value
+      ),
+
+      subtitle: m
+        .querySelector(
+          '#tSub'
+        )
+        .value.trim(),
+
+      icon:
+        m
+          .querySelector(
+            '#tIcon'
+          )
+          .value.trim() ||
+        '🌸',
+
+      sort_order: Number(
+        m.querySelector(
+          '#tOrder'
+        ).value
+      ),
+
+      published:
+        m.querySelector(
+          '#tPublished'
+        ).checked
+    };
+
+    const res = isEdit
+      ? await supabase
+          .from('topics')
+          .update(payload)
+          .eq('id', t.id)
+      : await supabase
+          .from('topics')
+          .insert(payload);
+
+    if (res.error) {
+      toast(
+        res.error.code ===
+          '23505'
+          ? 'That URL slug is already in use. Choose a different slug.'
+          : res.error.message,
+        true
+      );
+
+      return;
+    }
+
+    m.remove();
+
+    await renderAdmin();
+
+    toast(
+      isEdit
+        ? 'Topic updated successfully'
+        : 'Topic created successfully'
+    );
   };
 }
 
+/*
+=========================================================
+ADD / EDIT QUESTION
+=========================================================
 
-/* =========================================================
-   APP START
-   ========================================================= */
+IMPORTANT:
+- openQuestionForm() with NO argument = NEW QUESTION
+- openQuestionForm(question) = EDIT EXISTING QUESTION
 
-initializeTheme();
+The Add Question button correctly calls:
+openQuestionForm()
 
-async function start(){
-  const route=getRoute();
+and therefore cannot accidentally enter edit mode.
+*/
 
-  if(route.type === 'home'){
-    await renderHome();
-    return;
-  }
+function openQuestionForm(q = null) {
+  const isEdit = !!q;
 
-  if(route.type === 'quiz'){
-    await renderQuiz(route.slug);
-    return;
-  }
+  const topic = isEdit
+    ? state.adminTopics.find(
+        t =>
+          t.id ===
+          q.topic_id
+      )
+    : state.adminTopics.find(
+        t =>
+          t.id ===
+          document.querySelector(
+            '.admin-topic.active'
+          )?.dataset.id
+      );
 
-  if(route.type === 'admin'){
-    const isAdmin=await checkAdmin();
+  const opts =
+    q?.options || [
+      q?.option_a || '',
+      q?.option_b || '',
+      q?.option_c || '',
+      q?.option_d || ''
+    ];
 
-    if(isAdmin){
-      await renderAdmin();
-    }else{
-      await renderAdminLogin();
+  const m = modal(`
+    <div class="modal-head">
+
+      <h2>
+        ${
+          isEdit
+            ? 'Edit Question'
+            : 'Add Question'
+        }
+      </h2>
+
+      <button class="close">
+        ×
+      </button>
+
+    </div>
+
+    <form id="qForm">
+
+      <label>
+        Topic
+
+        <select id="qTopic">
+
+          ${state.adminTopics
+            .map(
+              t => `
+                <option
+                  value="${t.id}"
+                  ${
+                    topic?.id ===
+                    t.id
+                      ? 'selected'
+                      : ''
+                  }
+                >
+                  ${esc(t.name)}
+                </option>
+              `
+            )
+            .join('')}
+
+        </select>
+
+      </label>
+
+      <label>
+        Question text
+
+        <textarea
+          id="qText"
+          required
+          placeholder="Type the question in romaji / English as appropriate."
+        >${esc(
+          q?.question_text ||
+            ''
+        )}</textarea>
+
+      </label>
+
+      <div class="option-fields">
+
+        ${opts
+          .map(
+            (o, i) => `
+              <label>
+                Option
+                ${String.fromCharCode(
+                  65 + i
+                )}
+
+                <input
+                  class="qOpt"
+                  value="${esc(o)}"
+                  required
+                />
+
+              </label>
+            `
+          )
+          .join('')}
+
+      </div>
+
+      <label>
+        Correct answer
+
+        <select id="qCorrect">
+
+          ${[0, 1, 2, 3]
+            .map(
+              i => `
+                <option
+                  value="${i}"
+                  ${
+                    Number(
+                      q?.correct_index ??
+                        q?.correct_option ??
+                        0
+                    ) === i
+                      ? 'selected'
+                      : ''
+                  }
+                >
+                  Option
+                  ${String.fromCharCode(
+                    65 + i
+                  )}
+                </option>
+              `
+            )
+            .join('')}
+
+        </select>
+
+      </label>
+
+      <label>
+        Order
+
+        <input
+          id="qOrder"
+          type="number"
+          min="1"
+          value="${
+            q?.sort_order ||
+            (
+              state.adminQuestions.filter(
+                x =>
+                  x.topic_id ===
+                  topic?.id
+              ).length ||
+              0
+            ) + 1
+          }"
+        />
+
+      </label>
+
+      <button
+        class="primary full"
+        type="submit"
+      >
+        ${
+          isEdit
+            ? 'Save Question'
+            : 'Add Question'
+        }
+      </button>
+
+    </form>
+  `);
+
+  m.querySelector(
+    '.close'
+  ).onclick =
+    () => m.remove();
+
+  m.querySelector(
+    '#qForm'
+  ).onsubmit = async e => {
+    e.preventDefault();
+
+    const topicId =
+      m.querySelector(
+        '#qTopic'
+      ).value;
+
+    const options = [
+      ...m.querySelectorAll(
+        '.qOpt'
+      )
+    ].map(
+      x => x.value.trim()
+    );
+
+    if (
+      options.length !== 4 ||
+      options.some(
+        x => !x
+      )
+    ) {
+      toast(
+        'Please fill in all four answer options.',
+        true
+      );
+
+      return;
     }
 
-    return;
-  }
+    const questionText =
+      m.querySelector(
+        '#qText'
+      ).value.trim();
+
+    if (!questionText) {
+      toast(
+        'Please enter the question text.',
+        true
+      );
+
+      return;
+    }
+
+    const correctIndex =
+      Number(
+        m.querySelector(
+          '#qCorrect'
+        ).value
+      );
+
+    const sortOrder =
+      Number(
+        m.querySelector(
+          '#qOrder'
+        ).value
+      ) || 1;
+
+    /*
+      These fields support both the new database structure
+      and the older columns still present in your Supabase table.
+    */
+
+    const payload = {
+      topic_id: topicId,
+
+      question_text:
+        questionText,
+
+      options: options,
+
+      correct_index:
+        correctIndex,
+
+      sort_order:
+        sortOrder,
+
+      option_a:
+        options[0],
+
+      option_b:
+        options[1],
+
+      option_c:
+        options[2],
+
+      option_d:
+        options[3],
+
+      correct_option:
+        correctIndex
+    };
+
+    console.log(
+      'Saving question:',
+      payload
+    );
+
+    let res;
+
+    if (isEdit) {
+      res =
+        await supabase
+          .from('questions')
+          .update(payload)
+          .eq('id', q.id);
+    } else {
+      res =
+        await supabase
+          .from('questions')
+          .insert(payload);
+    }
+
+    console.log(
+      'Supabase save response:',
+      res
+    );
+
+    if (res.error) {
+      toast(
+        `Could not save question: ${res.error.message}`,
+        true
+      );
+
+      console.error(
+        'Question save error:',
+        res.error
+      );
+
+      return;
+    }
+
+    m.remove();
+
+    await renderAdmin();
+
+    toast(
+      isEdit
+        ? 'Question updated successfully'
+        : 'Question added successfully'
+    );
+  };
 }
 
-start();
-
-
-/* =========================================================
-   AUTH STATE
-   ========================================================= */
-
-supabase.auth.onAuthStateChange((event,session)=>{
-  if(event === 'SIGNED_OUT'){
-    state.adminUser=null;
+async function deleteTopic(id) {
+  if (
+    !confirm(
+      'Delete this topic and all its questions?'
+    )
+  ) {
+    return;
   }
 
-  if(event === 'SIGNED_IN' && session){
-    state.adminUser=session.user;
+  const { error } =
+    await supabase
+      .from('topics')
+      .delete()
+      .eq('id', id);
+
+  if (error) {
+    toast(
+      error.message,
+      true
+    );
+
+    return;
   }
-});
+
+  await renderAdmin();
+
+  toast(
+    'Topic deleted'
+  );
+}
+
+async function deleteQuestion(id) {
+  if (
+    !confirm(
+      'Delete this question?'
+    )
+  ) {
+    return;
+  }
+
+  const { error } =
+    await supabase
+      .from('questions')
+      .delete()
+      .eq('id', id);
+
+  if (error) {
+    toast(
+      error.message,
+      true
+    );
+
+    return;
+  }
+
+  await renderAdmin();
+
+  toast(
+    'Question deleted'
+  );
+}
+
+async function router() {
+  if (
+    path() === '/admin' ||
+    path().startsWith(
+      '/admin/'
+    )
+  ) {
+    if (!supabaseConfigured) {
+      layout(`
+        <main class="admin-shell">
+
+          <section class="login-card">
+
+            <div class="brand-mark big">
+              N
+            </div>
+
+            <div class="eyebrow dark">
+              SETUP NEEDED
+            </div>
+
+            <h1>
+              Connect Supabase
+            </h1>
+
+            <p>
+              This admin area is ready,
+              but the production database
+              connection has not been configured yet.
+            </p>
+
+            <a
+              class="back"
+              href="/"
+            >
+              ← Back to quizzes
+            </a>
+
+          </section>
+
+        </main>
+      `);
+
+      return;
+    }
+
+    await renderAdmin();
+
+    return;
+  }
+
+  await loadTopics();
+
+  if (
+    path().startsWith(
+      '/quiz/'
+    )
+  ) {
+    await quiz(
+      decodeURIComponent(
+        path().split(
+          '/'
+        )[2] || ''
+      )
+    );
+
+    return;
+  }
+
+  home();
+}
+
+router();
