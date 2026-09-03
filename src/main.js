@@ -29,7 +29,7 @@ const esc = (v = '') =>
       '&': '&amp;',
       '<': '&lt;',
       '>': '&gt;',
-      '"': '&quot;',
+      '"': '&#039;',
       "'": '&#039;'
     }[c])
   );
@@ -56,6 +56,7 @@ function layout(content, admin = false) {
       </a>
 
       <div class="header-actions">
+
         <button
           class="ghost"
           id="menuBtn"
@@ -69,6 +70,7 @@ function layout(content, admin = false) {
             ? '<button class="admin-pill" id="logoutBtn" type="button">Log out</button>'
             : '<a class="admin-pill" href="/admin">Admin</a>'
         }
+
       </div>
     </header>
 
@@ -87,8 +89,15 @@ function layout(content, admin = false) {
   const closeMenu = () => {
     document.body.classList.remove('menu-open');
 
-    menuBtn?.setAttribute('aria-expanded', 'false');
-    menuBtn?.setAttribute('aria-label', 'Open menu');
+    menuBtn?.setAttribute(
+      'aria-expanded',
+      'false'
+    );
+
+    menuBtn?.setAttribute(
+      'aria-label',
+      'Open menu'
+    );
 
     if (menuBtn) {
       menuBtn.textContent = '☰';
@@ -98,17 +107,30 @@ function layout(content, admin = false) {
   menuBtn?.addEventListener('click', e => {
     e.stopPropagation();
 
-    const open = !document.body.classList.contains('menu-open');
+    const open =
+      !document.body.classList.contains(
+        'menu-open'
+      );
 
-    document.body.classList.toggle('menu-open', open);
-
-    menuBtn.setAttribute('aria-expanded', String(open));
-    menuBtn.setAttribute(
-      'aria-label',
-      open ? 'Close menu' : 'Open menu'
+    document.body.classList.toggle(
+      'menu-open',
+      open
     );
 
-    menuBtn.textContent = open ? '×' : '☰';
+    menuBtn.setAttribute(
+      'aria-expanded',
+      String(open)
+    );
+
+    menuBtn.setAttribute(
+      'aria-label',
+      open
+        ? 'Close menu'
+        : 'Open menu'
+    );
+
+    menuBtn.textContent =
+      open ? '×' : '☰';
   });
 
   menu?.addEventListener('click', e => {
@@ -125,7 +147,9 @@ function layout(content, admin = false) {
 
   document.onclick = e => {
     if (
-      document.body.classList.contains('menu-open') &&
+      document.body.classList.contains(
+        'menu-open'
+      ) &&
       !menu?.contains(e.target) &&
       !menuBtn?.contains(e.target)
     ) {
@@ -133,31 +157,80 @@ function layout(content, admin = false) {
     }
   };
 
+  /*
+    DESKTOP LOG OUT BUTTON
+
+    The correct Supabase method is:
+    supabase.auth.signOut()
+  */
+
   document
     .querySelector('#logoutBtn')
-    ?.addEventListener('click', async () => {
-      await supabase.signOut();
-      state.adminUser = null;
-      renderAdminLogin();
-    });
+    ?.addEventListener(
+      'click',
+      async () => {
+        const { error } =
+          await supabase.auth.signOut();
+
+        if (error) {
+          toast(
+            error.message,
+            true
+          );
+
+          return;
+        }
+
+        state.adminUser = null;
+
+        await renderAdminLogin();
+      }
+    );
+
+  /*
+    MOBILE MENU LOG OUT BUTTON
+
+    This is the only logout option inside
+    the hamburger menu.
+  */
 
   document
     .querySelector('#menuLogout')
-    ?.addEventListener('click', async () => {
-      closeMenu();
-      await supabase.signOut();
-      state.adminUser = null;
-      renderAdminLogin();
-    });
+    ?.addEventListener(
+      'click',
+      async () => {
+        closeMenu();
+
+        const { error } =
+          await supabase.auth.signOut();
+
+        if (error) {
+          toast(
+            error.message,
+            true
+          );
+
+          return;
+        }
+
+        state.adminUser = null;
+
+        await renderAdminLogin();
+      }
+    );
 }
 
 function toast(msg, error = false) {
-  const el = document.querySelector('#toast');
+  const el =
+    document.querySelector('#toast');
 
   if (!el) return;
 
   el.textContent = msg;
-  el.className = 'toast show' + (error ? ' error' : '');
+
+  el.className =
+    'toast show' +
+    (error ? ' error' : '');
 
   setTimeout(() => {
     el.className = 'toast';
@@ -172,7 +245,10 @@ async function loadTopics() {
     return;
   }
 
-  const { data, error } = await supabase
+  const {
+    data,
+    error
+  } = await supabase
     .from('topics')
     .select('*')
     .eq('published', true)
@@ -189,7 +265,8 @@ async function loadTopics() {
 
 function normalizeQuestion(q) {
   const options =
-    Array.isArray(q.options) && q.options.length === 4
+    Array.isArray(q.options) &&
+    q.options.length === 4
       ? q.options
       : [
           q.option_a,
@@ -198,9 +275,10 @@ function normalizeQuestion(q) {
           q.option_d
         ];
 
-  const correctIndex = Number.isInteger(q.correct_index)
-    ? q.correct_index
-    : Number(q.correct_option);
+  const correctIndex =
+    Number.isInteger(q.correct_index)
+      ? q.correct_index
+      : Number(q.correct_option);
 
   return {
     ...q,
@@ -218,7 +296,10 @@ async function loadQuestions(topic) {
       : [];
   }
 
-  const { data, error } = await supabase
+  const {
+    data,
+    error
+  } = await supabase
     .from('questions')
     .select('*')
     .eq('topic_id', topic.id)
@@ -229,7 +310,9 @@ async function loadQuestions(topic) {
     return [];
   }
 
-  return (data || []).map(normalizeQuestion);
+  return (data || []).map(
+    normalizeQuestion
+  );
 }
 
 function home() {
@@ -239,8 +322,12 @@ function home() {
     <main class="shell">
 
       <section class="hero">
+
         <div class="hero-copy">
-          <div class="eyebrow">ROMAJI • FOCUSED • QUIZ ONLY</div>
+
+          <div class="eyebrow">
+            ROMAJI • FOCUSED • QUIZ ONLY
+          </div>
 
           <h1>
             Learn Japanese.<br>
@@ -251,6 +338,7 @@ function home() {
             Choose a topic, answer the questions, and see your result.
             No distractions — just focused romaji practice.
           </p>
+
         </div>
 
         <div class="hero-art">
@@ -258,12 +346,19 @@ function home() {
           <span>✦</span>
           <span>🌸</span>
         </div>
+
       </section>
 
       <section class="topic-head">
+
         <div>
-          <div class="eyebrow dark">QUIZ LIBRARY</div>
-          <h2>Choose your quiz</h2>
+          <div class="eyebrow dark">
+            QUIZ LIBRARY
+          </div>
+
+          <h2>
+            Choose your quiz
+          </h2>
         </div>
 
         <input
@@ -272,15 +367,22 @@ function home() {
           placeholder="Search topics…"
           aria-label="Search topics"
         />
+
       </section>
 
-      <section id="topicGrid" class="topic-grid"></section>
+      <section
+        id="topicGrid"
+        class="topic-grid"
+      ></section>
 
     </main>
   `);
 
   const render = (term = '') => {
-    const grid = document.querySelector('#topicGrid');
+    const grid =
+      document.querySelector(
+        '#topicGrid'
+      );
 
     if (state.topicError) {
       grid.innerHTML = `
@@ -289,64 +391,105 @@ function home() {
           Please refresh and try again.
         </div>
       `;
+
       return;
     }
 
-    const filtered = topics.filter(t =>
-      (t.name + ' ' + (t.subtitle || ''))
-        .toLowerCase()
-        .includes(term.toLowerCase())
-    );
+    const filtered =
+      topics.filter(t =>
+        (
+          t.name +
+          ' ' +
+          (t.subtitle || '')
+        )
+          .toLowerCase()
+          .includes(
+            term.toLowerCase()
+          )
+      );
 
     grid.innerHTML =
       filtered
         .map(
           (t, i) => `
             <article class="topic-card">
+
               <div class="topic-top">
+
                 <span class="topic-number">
-                  ${String(t.sort_order || i + 1).padStart(2, '0')}
+                  ${String(
+                    t.sort_order ||
+                      i + 1
+                  ).padStart(
+                    2,
+                    '0'
+                  )}
                 </span>
 
                 <span class="topic-icon">
-                  ${esc(t.icon || '🌸')}
+                  ${esc(
+                    t.icon || '🌸'
+                  )}
                 </span>
+
               </div>
 
-              <h3>${esc(t.name)}</h3>
+              <h3>
+                ${esc(t.name)}
+              </h3>
 
-              <p>${esc(t.subtitle || '')}</p>
+              <p>
+                ${esc(
+                  t.subtitle || ''
+                )}
+              </p>
 
               <a
                 class="take"
-                href="/quiz/${encodeURIComponent(t.slug)}"
+                href="/quiz/${encodeURIComponent(
+                  t.slug
+                )}"
               >
-                Take Quiz <span>↗</span>
+                Take Quiz
+                <span>↗</span>
               </a>
+
             </article>
           `
         )
-        .join('') || '<div class="empty">No matching topics.</div>';
+        .join('') ||
+      '<div class="empty">No matching topics.</div>';
   };
 
   render();
 
   document
     .querySelector('#topicSearch')
-    .addEventListener('input', e => {
-      render(e.target.value);
-    });
+    .addEventListener(
+      'input',
+      e => {
+        render(
+          e.target.value
+        );
+      }
+    );
 }
 
 async function quiz(slug) {
-  const topic = state.topics.find(t => t.slug === slug);
+  const topic =
+    state.topics.find(
+      t => t.slug === slug
+    );
 
   if (!topic) {
     notFound();
     return;
   }
 
-  const questions = await loadQuestions(topic);
+  const questions =
+    await loadQuestions(
+      topic
+    );
 
   state.currentTopic = topic;
   state.questions = questions;
@@ -357,20 +500,39 @@ async function quiz(slug) {
   if (state.questionError) {
     layout(`
       <main class="quiz-shell">
-        <a class="back" href="/">← All topics</a>
+
+        <a class="back" href="/">
+          ← All topics
+        </a>
 
         <section class="quiz-panel">
-          <div class="empty-icon">⚠</div>
-          <div class="eyebrow dark">${esc(topic.name)}</div>
-          <h1>Quiz could not load</h1>
+
+          <div class="empty-icon">
+            ⚠
+          </div>
+
+          <div class="eyebrow dark">
+            ${esc(topic.name)}
+          </div>
+
+          <h1>
+            Quiz could not load
+          </h1>
+
           <p>
             There was a problem loading this quiz.
             Please refresh and try again.
           </p>
-          <a class="take dark-btn" href="/">
+
+          <a
+            class="take dark-btn"
+            href="/"
+          >
             Choose another topic
           </a>
+
         </section>
+
       </main>
     `);
 
@@ -380,20 +542,39 @@ async function quiz(slug) {
   if (!questions.length) {
     layout(`
       <main class="quiz-shell">
-        <a class="back" href="/">← All topics</a>
+
+        <a class="back" href="/">
+          ← All topics
+        </a>
 
         <section class="quiz-panel">
-          <div class="empty-icon">🌸</div>
-          <div class="eyebrow dark">${esc(topic.name)}</div>
-          <h1>Quiz coming soon</h1>
+
+          <div class="empty-icon">
+            🌸
+          </div>
+
+          <div class="eyebrow dark">
+            ${esc(topic.name)}
+          </div>
+
+          <h1>
+            Quiz coming soon
+          </h1>
+
           <p>
             This topic is ready, but its questions have not
             been added yet.
           </p>
-          <a class="take dark-btn" href="/">
+
+          <a
+            class="take dark-btn"
+            href="/"
+          >
             Choose another topic
           </a>
+
         </section>
+
       </main>
     `);
 
@@ -404,94 +585,154 @@ async function quiz(slug) {
 }
 
 function renderQuestion() {
-  const q = normalizeQuestion(
-    state.questions[state.currentIndex]
-  );
+  const q =
+    normalizeQuestion(
+      state.questions[
+        state.currentIndex
+      ]
+    );
 
-  const total = state.questions.length;
+  const total =
+    state.questions.length;
 
-  const pct = Math.round(
-    ((state.currentIndex + 1) / total) * 100
-  );
+  const pct =
+    Math.round(
+      (
+        (state.currentIndex + 1) /
+        total
+      ) * 100
+    );
 
   layout(`
     <main class="quiz-shell">
-      <a class="back" href="/">← All topics</a>
+
+      <a class="back" href="/">
+        ← All topics
+      </a>
 
       <section class="quiz-panel">
 
         <div class="quiz-meta">
+
           <span>
-            ${esc(state.currentTopic.name).toUpperCase()}
+            ${esc(
+              state.currentTopic.name
+            ).toUpperCase()}
           </span>
 
           <span>
-            ${state.currentIndex + 1} / ${total}
+            ${state.currentIndex + 1}
+            /
+            ${total}
           </span>
+
         </div>
 
         <div class="progress-line">
           <i style="width:${pct}%"></i>
         </div>
 
-        <h1>${esc(q.question_text)}</h1>
+        <h1>
+          ${esc(q.question_text)}
+        </h1>
 
         <div class="answers">
+
           ${q.options
             .map(
               (o, i) => `
                 <button
                   class="answer ${
-                    state.selected === i ? 'selected' : ''
+                    state.selected === i
+                      ? 'selected'
+                      : ''
                   }"
                   data-i="${i}"
                 >
-                  <b>${String.fromCharCode(65 + i)}</b>
-                  <span>${esc(o)}</span>
+                  <b>
+                    ${String.fromCharCode(
+                      65 + i
+                    )}
+                  </b>
+
+                  <span>
+                    ${esc(o)}
+                  </span>
+
                 </button>
               `
             )
             .join('')}
+
         </div>
 
         <div class="quiz-footer">
-          <span class="hint">Choose one answer</span>
 
-          <button id="nextBtn" class="primary">
+          <span class="hint">
+            Choose one answer
+          </span>
+
+          <button
+            id="nextBtn"
+            class="primary"
+          >
             ${
-              state.currentIndex === total - 1
+              state.currentIndex ===
+              total - 1
                 ? 'Finish Quiz'
                 : 'Next →'
             }
           </button>
+
         </div>
 
       </section>
+
     </main>
   `);
 
-  document.querySelectorAll('.answer').forEach(b => {
-    b.addEventListener('click', () => {
-      state.selected = Number(b.dataset.i);
-      renderQuestion();
+  document
+    .querySelectorAll('.answer')
+    .forEach(b => {
+      b.addEventListener(
+        'click',
+        () => {
+          state.selected =
+            Number(
+              b.dataset.i
+            );
+
+          renderQuestion();
+        }
+      );
     });
-  });
 
   document
     .querySelector('#nextBtn')
-    .addEventListener('click', nextQuestion);
+    .addEventListener(
+      'click',
+      nextQuestion
+    );
 }
 
 function nextQuestion() {
-  if (state.selected === null) {
-    toast('Please choose an answer first.', true);
+  if (
+    state.selected === null
+  ) {
+    toast(
+      'Please choose an answer first.',
+      true
+    );
+
     return;
   }
 
   if (
     state.selected ===
     normalizeQuestion(
-      state.questions[state.currentIndex]
+      state.questions[
+        state.currentIndex
+      ]
     ).correct_index
   ) {
     state.score++;
@@ -500,7 +741,10 @@ function nextQuestion() {
   state.currentIndex++;
   state.selected = null;
 
-  if (state.currentIndex < state.questions.length) {
+  if (
+    state.currentIndex <
+    state.questions.length
+  ) {
     renderQuestion();
   } else {
     renderResult();
@@ -508,35 +752,47 @@ function nextQuestion() {
 }
 
 function renderResult() {
-  const total = state.questions.length;
+  const total =
+    state.questions.length;
 
-  const pct = Math.round(
-    (state.score / total) * 100
-  );
+  const pct =
+    Math.round(
+      (state.score / total) *
+        100
+    );
 
   layout(`
     <main class="quiz-shell">
 
       <section class="quiz-panel result">
 
-        <div class="result-flower">🌸</div>
+        <div class="result-flower">
+          🌸
+        </div>
 
         <div class="eyebrow dark">
           QUIZ COMPLETE
         </div>
 
-        <h1>${pct}%</h1>
+        <h1>
+          ${pct}%
+        </h1>
 
         <p>
-          You got <strong>${state.score}</strong>
-          out of <strong>${total}</strong> correct.
+          You got
+          <strong>${state.score}</strong>
+          out of
+          <strong>${total}</strong>
+          correct.
         </p>
 
         <div class="result-actions">
 
           <a
             class="primary take"
-            href="/quiz/${esc(state.currentTopic.slug)}"
+            href="/quiz/${esc(
+              state.currentTopic.slug
+            )}"
           >
             Try Again
           </a>
@@ -562,15 +818,22 @@ function notFound() {
 
       <section class="quiz-panel result">
 
-        <div class="eyebrow dark">404</div>
+        <div class="eyebrow dark">
+          404
+        </div>
 
-        <h1>Page not found</h1>
+        <h1>
+          Page not found
+        </h1>
 
         <p>
           That quiz link does not exist.
         </p>
 
-        <a class="primary take" href="/">
+        <a
+          class="primary take"
+          href="/"
+        >
           Back to quizzes
         </a>
 
@@ -586,13 +849,17 @@ async function renderAdminLogin() {
 
       <section class="login-card">
 
-        <div class="brand-mark big">N</div>
+        <div class="brand-mark big">
+          N
+        </div>
 
         <div class="eyebrow dark">
           PRIVATE ADMIN
         </div>
 
-        <h1>Quiz Manager</h1>
+        <h1>
+          Quiz Manager
+        </h1>
 
         <p>
           Sign in to manage topics and questions.
@@ -602,22 +869,26 @@ async function renderAdminLogin() {
 
           <label>
             Email
+
             <input
               id="email"
               type="email"
               required
               placeholder="your admin email"
             />
+
           </label>
 
           <label>
             Password
+
             <input
               id="password"
               type="password"
               required
               placeholder="Your password"
             />
+
           </label>
 
           <button class="primary full">
@@ -626,7 +897,10 @@ async function renderAdminLogin() {
 
         </form>
 
-        <a class="back" href="/">
+        <a
+          class="back"
+          href="/"
+        >
           ← Back to quizzes
         </a>
 
@@ -637,76 +911,112 @@ async function renderAdminLogin() {
 
   document
     .querySelector('#loginForm')
-    .addEventListener('submit', async e => {
-      e.preventDefault();
+    .addEventListener(
+      'submit',
+      async e => {
+        e.preventDefault();
 
-      if (!supabaseConfigured) {
-        toast('Connect Supabase first.', true);
-        return;
+        if (!supabaseConfigured) {
+          toast(
+            'Connect Supabase first.',
+            true
+          );
+
+          return;
+        }
+
+        const {
+          data,
+          error
+        } =
+          await supabase.auth.signInWithPassword(
+            {
+              email:
+                document.querySelector(
+                  '#email'
+                ).value,
+
+              password:
+                document.querySelector(
+                  '#password'
+                ).value
+            }
+          );
+
+        if (error) {
+          toast(
+            error.message,
+            true
+          );
+
+          return;
+        }
+
+        state.adminUser =
+          data.user;
+
+        await renderAdmin();
       }
-
-      const {
-        data,
-        error
-      } = await supabase.auth.signInWithPassword({
-        email: document.querySelector('#email').value,
-        password: document.querySelector('#password').value
-      });
-
-      if (error) {
-        toast(error.message, true);
-        return;
-      }
-
-      state.adminUser = data.user;
-
-      await renderAdmin();
-    });
+    );
 }
 
 async function renderAdmin() {
   const {
     data: sessionData
-  } = await supabase.auth.getSession();
+  } =
+    await supabase.auth.getSession();
 
   if (!sessionData.session) {
     renderAdminLogin();
     return;
   }
 
-  state.adminUser = sessionData.session.user;
+  state.adminUser =
+    sessionData.session.user;
 
   const {
     data: topics,
     error: tErr
-  } = await supabase
-    .from('topics')
-    .select('*')
-    .order('sort_order');
+  } =
+    await supabase
+      .from('topics')
+      .select('*')
+      .order('sort_order');
 
   if (tErr) {
-    toast(tErr.message, true);
+    toast(
+      tErr.message,
+      true
+    );
+
     return;
   }
 
-  state.adminTopics = topics || [];
+  state.adminTopics =
+    topics || [];
 
   const {
     data: qs,
     error: qErr
-  } = await supabase
-    .from('questions')
-    .select('*')
-    .order('sort_order');
+  } =
+    await supabase
+      .from('questions')
+      .select('*')
+      .order('sort_order');
 
   if (qErr) {
-    toast(qErr.message, true);
+    toast(
+      qErr.message,
+      true
+    );
+
     return;
   }
 
-  state.adminQuestions = (qs || []).map(
-    normalizeQuestion
-  );
+  state.adminQuestions =
+    (qs || []).map(
+      normalizeQuestion
+    );
 
   layout(
     `
@@ -715,12 +1025,14 @@ async function renderAdmin() {
         <div class="admin-title">
 
           <div>
+
             <div class="eyebrow dark">
               PRIVATE ADMIN
             </div>
 
             <h1>
               Quiz Manager
+
               <small class="version-tag">
                 v${APP_VERSION}
               </small>
@@ -729,9 +1041,13 @@ async function renderAdmin() {
             <p>
               Manage the 40 topic links and every quiz question.
             </p>
+
           </div>
 
-          <button id="newTopic" class="primary">
+          <button
+            id="newTopic"
+            class="primary"
+          >
             + New Topic
           </button>
 
@@ -741,9 +1057,13 @@ async function renderAdmin() {
 
           <aside class="admin-topics">
 
-            <h3>Topics</h3>
+            <h3>
+              Topics
+            </h3>
 
-            <div id="adminTopicList"></div>
+            <div
+              id="adminTopicList"
+            ></div>
 
           </aside>
 
@@ -776,39 +1096,51 @@ async function renderAdmin() {
 function drawAdminTopics() {
   document.querySelector(
     '#adminTopicList'
-  ).innerHTML = state.adminTopics
-    .map(
-      t => `
-        <button
-          class="admin-topic"
-          data-id="${t.id}"
-        >
-          <span>
-            ${esc(t.icon || '🌸')}
-          </span>
+  ).innerHTML =
+    state.adminTopics
+      .map(
+        t => `
+          <button
+            class="admin-topic"
+            data-id="${t.id}"
+          >
 
-          <span>
-            ${esc(t.name)}
-          </span>
+            <span>
+              ${esc(
+                t.icon || '🌸'
+              )}
+            </span>
 
-          <small>
-            ${
-              state.adminQuestions.filter(
-                q => q.topic_id === t.id
-              ).length
-            }
-          </small>
-        </button>
-      `
-    )
-    .join('');
+            <span>
+              ${esc(t.name)}
+            </span>
+
+            <small>
+              ${
+                state.adminQuestions.filter(
+                  q =>
+                    q.topic_id ===
+                    t.id
+                ).length
+              }
+            </small>
+
+          </button>
+        `
+      )
+      .join('');
 
   document
-    .querySelectorAll('.admin-topic')
+    .querySelectorAll(
+      '.admin-topic'
+    )
     .forEach(b => {
       b.addEventListener(
         'click',
-        () => selectAdminTopic(b.dataset.id)
+        () =>
+          selectAdminTopic(
+            b.dataset.id
+          )
       );
     });
 }
@@ -819,18 +1151,22 @@ function selectAdminTopic(id) {
     return;
   }
 
-  const t = state.adminTopics.find(
-    x => x.id === id
-  );
+  const t =
+    state.adminTopics.find(
+      x => x.id === id
+    );
 
   if (!t) return;
 
   document
-    .querySelectorAll('.admin-topic')
+    .querySelectorAll(
+      '.admin-topic'
+    )
     .forEach(b => {
       b.classList.toggle(
         'active',
-        b.dataset.id === String(id)
+        b.dataset.id ===
+          String(id)
       );
     });
 
@@ -842,12 +1178,18 @@ function selectAdminTopic(id) {
       <div>
 
         <div class="topic-icon large">
-          ${esc(t.icon || '🌸')}
+          ${esc(
+            t.icon || '🌸'
+          )}
         </div>
 
-        <h2>${esc(t.name)}</h2>
+        <h2>
+          ${esc(t.name)}
+        </h2>
 
-        <p>/${esc(t.slug)}</p>
+        <p>
+          /${esc(t.slug)}
+        </p>
 
       </div>
 
@@ -877,7 +1219,9 @@ function selectAdminTopic(id) {
         Questions (
         ${
           state.adminQuestions.filter(
-            q => q.topic_id === t.id
+            q =>
+              q.topic_id ===
+              t.id
           ).length
         }
         )
@@ -892,7 +1236,9 @@ function selectAdminTopic(id) {
 
     </div>
 
-    <div id="questionList"></div>
+    <div
+      id="questionList"
+    ></div>
   `;
 
   drawQuestions(t.id);
@@ -908,7 +1254,8 @@ function selectAdminTopic(id) {
     .querySelector('#deleteTopic')
     .addEventListener(
       'click',
-      () => deleteTopic(t.id)
+      () =>
+        deleteTopic(t.id)
     );
 
   /*
@@ -920,6 +1267,7 @@ function selectAdminTopic(id) {
 
     We intentionally call it with no argument.
   */
+
   document
     .querySelector('#newQuestion')
     .addEventListener(
@@ -929,13 +1277,19 @@ function selectAdminTopic(id) {
 }
 
 function drawQuestions(topicId) {
-  const qs = state.adminQuestions
-    .filter(q => q.topic_id === topicId)
-    .map(normalizeQuestion)
-    .sort(
-      (a, b) =>
-        a.sort_order - b.sort_order
-    );
+  const qs =
+    state.adminQuestions
+      .filter(
+        q =>
+          q.topic_id ===
+          topicId
+      )
+      .map(normalizeQuestion)
+      .sort(
+        (a, b) =>
+          a.sort_order -
+          b.sort_order
+      );
 
   document.querySelector(
     '#questionList'
@@ -946,13 +1300,20 @@ function drawQuestions(topicId) {
           <article class="q-card">
 
             <div class="q-num">
-              Q${String(i + 1).padStart(2, '0')}
+              Q${String(
+                i + 1
+              ).padStart(
+                2,
+                '0'
+              )}
             </div>
 
             <div class="q-content">
 
               <h4>
-                ${esc(q.question_text)}
+                ${esc(
+                  q.question_text
+                )}
               </h4>
 
               <div class="option-mini">
@@ -962,7 +1323,8 @@ function drawQuestions(topicId) {
                     (o, j) => `
                       <span
                         class="${
-                          j === q.correct_index
+                          j ===
+                          q.correct_index
                             ? 'correct'
                             : ''
                         }"
@@ -1012,27 +1374,37 @@ function drawQuestions(topicId) {
         () =>
           openQuestionForm(
             state.adminQuestions.find(
-              q => q.id === b.dataset.id
+              q =>
+                q.id ===
+                b.dataset.id
             )
           )
       );
     });
 
   document
-    .querySelectorAll('.deleteQ')
+    .querySelectorAll(
+      '.deleteQ'
+    )
     .forEach(b => {
       b.addEventListener(
         'click',
         () =>
-          deleteQuestion(b.dataset.id)
+          deleteQuestion(
+            b.dataset.id
+          )
       );
     });
 }
 
 function modal(inner) {
-  const wrap = document.createElement('div');
+  const wrap =
+    document.createElement(
+      'div'
+    );
 
-  wrap.className = 'modal-backdrop';
+  wrap.className =
+    'modal-backdrop';
 
   wrap.innerHTML = `
     <div class="modal">
@@ -1040,13 +1412,18 @@ function modal(inner) {
     </div>
   `;
 
-  document.body.appendChild(wrap);
+  document.body.appendChild(
+    wrap
+  );
 
-  wrap.addEventListener('click', e => {
-    if (e.target === wrap) {
-      wrap.remove();
+  wrap.addEventListener(
+    'click',
+    e => {
+      if (e.target === wrap) {
+        wrap.remove();
+      }
     }
-  });
+  );
 
   return wrap;
 }
@@ -1058,7 +1435,11 @@ function openTopicForm(t = null) {
     <div class="modal-head">
 
       <h2>
-        ${isEdit ? 'Edit Topic' : 'New Topic'}
+        ${
+          isEdit
+            ? 'Edit Topic'
+            : 'New Topic'
+        }
       </h2>
 
       <button class="close">
@@ -1071,53 +1452,72 @@ function openTopicForm(t = null) {
 
       <label>
         Topic name
+
         <input
           id="tName"
           required
-          value="${esc(t?.name || '')}"
+          value="${esc(
+            t?.name || ''
+          )}"
           placeholder="e.g. Numbers"
         />
+
       </label>
 
       <label>
         URL slug
+
         <input
           id="tSlug"
           required
-          value="${esc(t?.slug || '')}"
+          value="${esc(
+            t?.slug || ''
+          )}"
           placeholder="numbers"
         />
+
       </label>
 
       <label>
         Subtitle
+
         <input
           id="tSub"
-          value="${esc(t?.subtitle || '')}"
+          value="${esc(
+            t?.subtitle || ''
+          )}"
           placeholder="Romaji label or short description"
         />
+
       </label>
 
       <label>
         Icon
+
         <input
           id="tIcon"
-          value="${esc(t?.icon || '🌸')}"
+          value="${esc(
+            t?.icon || '🌸'
+          )}"
           maxlength="4"
         />
+
       </label>
 
       <label>
         Order
+
         <input
           id="tOrder"
           type="number"
           min="1"
           value="${
             t?.sort_order ||
-            state.adminTopics.length + 1
+            state.adminTopics
+              .length + 1
           }"
         />
+
       </label>
 
       <label class="check">
@@ -1126,7 +1526,8 @@ function openTopicForm(t = null) {
           id="tPublished"
           type="checkbox"
           ${
-            t?.published !== false
+            t?.published !==
+            false
               ? 'checked'
               : ''
           }
@@ -1149,92 +1550,104 @@ function openTopicForm(t = null) {
     </form>
   `);
 
-  m.querySelector('.close').onclick =
+  m.querySelector(
+    '.close'
+  ).onclick =
     () => m.remove();
 
-  m.querySelector('#tName')
-    .addEventListener(
-      'input',
-      e => {
-        if (!isEdit) {
-          m.querySelector(
-            '#tSlug'
-          ).value = slugify(
+  m.querySelector(
+    '#tName'
+  ).addEventListener(
+    'input',
+    e => {
+      if (!isEdit) {
+        m.querySelector(
+          '#tSlug'
+        ).value =
+          slugify(
             e.target.value
           );
-        }
       }
-    );
+    }
+  );
 
-  m.querySelector('#topicForm')
-    .onsubmit = async e => {
-      e.preventDefault();
+  m.querySelector(
+    '#topicForm'
+  ).onsubmit = async e => {
+    e.preventDefault();
 
-      const payload = {
-        name: m
-          .querySelector('#tName')
+    const payload = {
+      name: m
+        .querySelector(
+          '#tName'
+        )
+        .value.trim(),
+
+      slug: slugify(
+        m
+          .querySelector(
+            '#tSlug'
+          )
           .value
-          .trim(),
+      ),
 
-        slug: slugify(
-          m
-            .querySelector('#tSlug')
-            .value
-        ),
+      subtitle: m
+        .querySelector(
+          '#tSub'
+        )
+        .value.trim(),
 
-        subtitle: m
-          .querySelector('#tSub')
-          .value
-          .trim(),
+      icon:
+        m
+          .querySelector(
+            '#tIcon'
+          )
+          .value.trim() ||
+        '🌸',
 
-        icon:
-          m
-            .querySelector('#tIcon')
-            .value
-            .trim() || '🌸',
+      sort_order: Number(
+        m.querySelector(
+          '#tOrder'
+        ).value
+      ),
 
-        sort_order: Number(
-          m.querySelector(
-            '#tOrder'
-          ).value
-        ),
-
-        published:
-          m.querySelector(
-            '#tPublished'
-          ).checked
-      };
-
-      const res = isEdit
-        ? await supabase
-            .from('topics')
-            .update(payload)
-            .eq('id', t.id)
-        : await supabase
-            .from('topics')
-            .insert(payload);
-
-      if (res.error) {
-        toast(
-          res.error.code === '23505'
-            ? 'That URL slug is already in use. Choose a different slug.'
-            : res.error.message,
-          true
-        );
-
-        return;
-      }
-
-      m.remove();
-
-      await renderAdmin();
-
-      toast(
-        isEdit
-          ? 'Topic updated successfully'
-          : 'Topic created successfully'
-      );
+      published:
+        m.querySelector(
+          '#tPublished'
+        ).checked
     };
+
+    const res = isEdit
+      ? await supabase
+          .from('topics')
+          .update(payload)
+          .eq('id', t.id)
+      : await supabase
+          .from('topics')
+          .insert(payload);
+
+    if (res.error) {
+      toast(
+        res.error.code ===
+          '23505'
+          ? 'That URL slug is already in use. Choose a different slug.'
+          : res.error.message,
+        true
+      );
+
+      return;
+    }
+
+    m.remove();
+
+    await renderAdmin();
+
+    toast(
+      isEdit
+        ? 'Topic updated successfully'
+        : 'Topic created successfully'
+    );
+  };
 }
 
 /*
@@ -1246,7 +1659,7 @@ IMPORTANT:
 - openQuestionForm() with NO argument = NEW QUESTION
 - openQuestionForm(question) = EDIT EXISTING QUESTION
 
-The Add Question button now correctly calls:
+The Add Question button correctly calls:
 openQuestionForm()
 
 and therefore cannot accidentally enter edit mode.
@@ -1257,7 +1670,9 @@ function openQuestionForm(q = null) {
 
   const topic = isEdit
     ? state.adminTopics.find(
-        t => t.id === q.topic_id
+        t =>
+          t.id ===
+          q.topic_id
       )
     : state.adminTopics.find(
         t =>
@@ -1305,7 +1720,8 @@ function openQuestionForm(q = null) {
                 <option
                   value="${t.id}"
                   ${
-                    topic?.id === t.id
+                    topic?.id ===
+                    t.id
                       ? 'selected'
                       : ''
                   }
@@ -1328,7 +1744,8 @@ function openQuestionForm(q = null) {
           required
           placeholder="Type the question in romaji / English as appropriate."
         >${esc(
-          q?.question_text || ''
+          q?.question_text ||
+            ''
         )}</textarea>
 
       </label>
@@ -1370,8 +1787,8 @@ function openQuestionForm(q = null) {
                   ${
                     Number(
                       q?.correct_index ??
-                      q?.correct_option ??
-                      0
+                        q?.correct_option ??
+                        0
                     ) === i
                       ? 'selected'
                       : ''
@@ -1404,7 +1821,8 @@ function openQuestionForm(q = null) {
                 x =>
                   x.topic_id ===
                   topic?.id
-              ).length || 0
+              ).length ||
+              0
             ) + 1
           }"
         />
@@ -1425,149 +1843,155 @@ function openQuestionForm(q = null) {
     </form>
   `);
 
-  m.querySelector('.close').onclick =
+  m.querySelector(
+    '.close'
+  ).onclick =
     () => m.remove();
 
-  m.querySelector('#qForm')
-    .onsubmit = async e => {
-      e.preventDefault();
+  m.querySelector(
+    '#qForm'
+  ).onsubmit = async e => {
+    e.preventDefault();
 
-      const topicId =
-        m.querySelector(
-          '#qTopic'
-        ).value;
+    const topicId =
+      m.querySelector(
+        '#qTopic'
+      ).value;
 
-      const options = [
-        ...m.querySelectorAll(
-          '.qOpt'
-        )
-      ].map(
-        x => x.value.trim()
+    const options = [
+      ...m.querySelectorAll(
+        '.qOpt'
+      )
+    ].map(
+      x => x.value.trim()
+    );
+
+    if (
+      options.length !== 4 ||
+      options.some(
+        x => !x
+      )
+    ) {
+      toast(
+        'Please fill in all four answer options.',
+        true
       );
 
-      if (
-        options.length !== 4 ||
-        options.some(
-          x => !x
-        )
-      ) {
-        toast(
-          'Please fill in all four answer options.',
-          true
-        );
+      return;
+    }
 
-        return;
-      }
+    const questionText =
+      m.querySelector(
+        '#qText'
+      ).value.trim();
 
-      const questionText =
-        m.querySelector(
-          '#qText'
-        ).value.trim();
-
-      if (!questionText) {
-        toast(
-          'Please enter the question text.',
-          true
-        );
-
-        return;
-      }
-
-      const correctIndex =
-        Number(
-          m.querySelector(
-            '#qCorrect'
-          ).value
-        );
-
-      const sortOrder =
-        Number(
-          m.querySelector(
-            '#qOrder'
-          ).value
-        ) || 1;
-
-      /*
-        These fields support both the new database structure
-        and the older columns still present in your Supabase table.
-      */
-      const payload = {
-        topic_id: topicId,
-
-        question_text:
-          questionText,
-
-        options: options,
-
-        correct_index:
-          correctIndex,
-
-        sort_order:
-          sortOrder,
-
-        option_a:
-          options[0],
-
-        option_b:
-          options[1],
-
-        option_c:
-          options[2],
-
-        option_d:
-          options[3],
-
-        correct_option:
-          correctIndex
-      };
-
-      console.log(
-        'Saving question:',
-        payload
+    if (!questionText) {
+      toast(
+        'Please enter the question text.',
+        true
       );
 
-      let res;
+      return;
+    }
 
-      if (isEdit) {
-        res = await supabase
+    const correctIndex =
+      Number(
+        m.querySelector(
+          '#qCorrect'
+        ).value
+      );
+
+    const sortOrder =
+      Number(
+        m.querySelector(
+          '#qOrder'
+        ).value
+      ) || 1;
+
+    /*
+      These fields support both the new database structure
+      and the older columns still present in your Supabase table.
+    */
+
+    const payload = {
+      topic_id: topicId,
+
+      question_text:
+        questionText,
+
+      options: options,
+
+      correct_index:
+        correctIndex,
+
+      sort_order:
+        sortOrder,
+
+      option_a:
+        options[0],
+
+      option_b:
+        options[1],
+
+      option_c:
+        options[2],
+
+      option_d:
+        options[3],
+
+      correct_option:
+        correctIndex
+    };
+
+    console.log(
+      'Saving question:',
+      payload
+    );
+
+    let res;
+
+    if (isEdit) {
+      res =
+        await supabase
           .from('questions')
           .update(payload)
           .eq('id', q.id);
-      } else {
-        res = await supabase
+    } else {
+      res =
+        await supabase
           .from('questions')
           .insert(payload);
-      }
+    }
 
-      console.log(
-        'Supabase save response:',
-        res
-      );
+    console.log(
+      'Supabase save response:',
+      res
+    );
 
-      if (res.error) {
-        toast(
-          `Could not save question: ${res.error.message}`,
-          true
-        );
-
-        console.error(
-          'Question save error:',
-          res.error
-        );
-
-        return;
-      }
-
-      m.remove();
-
-      await renderAdmin();
-
+    if (res.error) {
       toast(
-        isEdit
-          ? 'Question updated successfully'
-          : 'Question added successfully'
+        `Could not save question: ${res.error.message}`,
+        true
       );
-    };
+
+      console.error(
+        'Question save error:',
+        res.error
+      );
+
+      return;
+    }
+
+    m.remove();
+
+    await renderAdmin();
+
+    toast(
+      isEdit
+        ? 'Question updated successfully'
+        : 'Question added successfully'
+    );
+  };
 }
 
 async function deleteTopic(id) {
@@ -1635,7 +2059,9 @@ async function deleteQuestion(id) {
 async function router() {
   if (
     path() === '/admin' ||
-    path().startsWith('/admin/')
+    path().startsWith(
+      '/admin/'
+    )
   ) {
     if (!supabaseConfigured) {
       layout(`
@@ -1661,7 +2087,10 @@ async function router() {
               connection has not been configured yet.
             </p>
 
-            <a class="back" href="/">
+            <a
+              class="back"
+              href="/"
+            >
               ← Back to quizzes
             </a>
 
@@ -1681,11 +2110,15 @@ async function router() {
   await loadTopics();
 
   if (
-    path().startsWith('/quiz/')
+    path().startsWith(
+      '/quiz/'
+    )
   ) {
     await quiz(
       decodeURIComponent(
-        path().split('/')[2] || ''
+        path().split(
+          '/'
+        )[2] || ''
       )
     );
 
